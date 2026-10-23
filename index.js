@@ -3,15 +3,19 @@ const cors = require('cors');
 require('dotenv').config();
 
 const productosRoutes = require('./src/routes/productos');
-const categoriasRoutes = require('./src/routes/categorias'); // <--- 1. Importar
+const categoriasRoutes = require('./src/routes/categorias');
+const insumosRoutes = require('./src/routes/insumos');         // <--- Importar
+const escandalloRoutes = require('./src/routes/escandallo');   // <--- Importar
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Rutas de la API
+// Rutas
 app.use('/api/productos', productosRoutes);
-app.use('/api/categorias', categoriasRoutes); // <--- 2. Usar la ruta
+app.use('/api/categorias', categoriasRoutes);
+app.use('/api/insumos', insumosRoutes);                        // <--- Usar
+app.use('/api/escandallo', escandalloRoutes);                  // <--- Usar
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

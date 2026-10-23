@@ -3,8 +3,18 @@ const db = require('../config/db');
 // 1. Obtener todas las categorías activas
 const getCategorias = async (req, res) => {
   try {
-    const query = 'SELECT * FROM categorias WHERE activo = true ORDER BY id_categoria ASC;';
-    const { rows } = await db.query(query);
+    const { q } = req.query;
+    let query = 'SELECT * FROM categorias WHERE activo = true';
+    let params = [];
+
+    if (q) {
+      query += ' AND nombre_categoria ILIKE $1';
+      params.push(`%${q}%`);
+    }
+
+    query += ' ORDER BY id_categoria ASC;';
+
+    const { rows } = await db.query(query, params);
     res.json(rows);
   } catch (error) {
     console.error(error);
