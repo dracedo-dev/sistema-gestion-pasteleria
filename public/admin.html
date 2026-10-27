@@ -120,9 +120,13 @@
 
             <!-- SECCIÓN PRODUCTOS -->
             <div id="sec-productos" class="seccion-tab" style="display: none;">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <input type="text" id="searchProductoAdmin" class="form-control w-50" placeholder="Buscar producto...">
-                    <button class="btn btn-success" onclick="abrirModal('modalProducto')">+ Nuevo Producto</button>
+                <div class="row mb-3">
+                    <div class="col-md-8">
+                        <input type="text" id="searchProductoAdmin" class="form-control" placeholder="Buscar por ID, nombre o categoría...">
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <button class="btn btn-success w-100" onclick="abrirModalProducto()">+ Nuevo Producto</button>
+                    </div>
                 </div>
                 <table class="table table-hover align-middle">
                     <thead class="table-dark">
@@ -132,12 +136,15 @@
                             <th>Categoría</th>
                             <th>Precio Base</th>
                             <th>Descripción</th>
+                            <th class="text-center">Acciones</th>
                         </tr>
                     </thead>
                     <tbody id="tablaProductosAdmin"></tbody>
                 </table>
+                <nav class="mt-3">
+                    <ul class="pagination justify-content-center" id="paginationProductos"></ul>
+                </nav>
             </div>
-
         </div>
     </div>
 
@@ -270,23 +277,26 @@
         </div>
     </div>
 
-    <!-- MODAL PRODUCTO -->
+    <!-- MODAL CREAR / EDITAR PRODUCTO -->
     <div class="modal fade" id="modalProducto" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-success text-white">
-                    <h5 class="modal-title">Agregar Producto</h5>
+                    <h5 class="modal-title" id="tituloModalProducto">Registrar Nuevo Producto</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <form id="formProducto">
                     <div class="modal-body">
+                        <input type="hidden" id="prodId">
                         <div class="mb-3">
                             <label class="form-label">Nombre del Producto *</label>
                             <input type="text" id="prodNombre" class="form-control" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">ID Categoría *</label>
-                            <input type="number" id="prodCategoria" class="form-control" required placeholder="Ej: 1">
+                            <label class="form-label">Categoría (Solo activas) *</label>
+                            <select id="prodCategoria" class="form-select" required>
+                                <!-- Se llena dinámicamente -->
+                            </select>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Precio Base ($) *</label>
@@ -306,6 +316,34 @@
         </div>
     </div>
 
+    <!-- MODAL VER DETALLE / HISTORIAL DE PRODUCTO -->
+    <div class="modal fade" id="modalDetalleProducto" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title" id="tituloDetalleProducto">Historial de Pedidos del Producto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <table class="table table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th>ID Pedido</th>
+                                <th>Código</th>
+                                <th>Fecha</th>
+                                <th>Estado</th>
+                                <th>Cantidad</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaDetallePedidosProducto"></tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/bootstrap.bundle.min.js"></script>
     <script>
         const API = 'http://localhost:3000/api';
@@ -626,24 +664,167 @@
         await cargarClientes(); // Actualiza la tabla al instante sin recargar la página
     });
 
-        const cargarProductosAdmin = async (q = '') => {
+        // ================= PRODUCTOS =================
+        let paginaActualProd = 1;
+        const porPaginaProd = 5;
+        let listaProductosCache = [];
+
+        // Función para cargar categorías activas en el select del modal
+        async function cargarCategoriasActivasEnSelect() {
             try {
-                const res = await fetch(`${API}/productos${q ? '?q=' + q : ''}`);
-                const data = await res.json();
-                const tbody = document.getElementById('tablaProductosAdmin');
-                if (tbody) {
-                    tbody.innerHTML = data.map(p => `
-                        <tr>
-                            <td>${p.id_producto}</td>
-                            <td class="fw-bold">${p.nombre_producto}</td>
-                            <td>${p.nombre_categoria || '-'}</td>
-                            <td>$${p.precio_base}</td>
-                            <td>${p.descripcion || '-'}</td>
-                        </tr>
-                    `).join('');
-                }
+                const res = await fetch(`${API}/categorias?estado=true`);
+                const categorias = await res.json();
+                const select = document.getElementById('prodCategoria');
+                if (!select) return;
+
+                select.innerHTML = `<option value="">Seleccione una categoría...</option>` + 
+                    categorias.map(c => `<option value="${c.id_categoria}">${c.nombre_categoria}</option>`).join('');
+            } catch (err) {
+                console.error("Error al cargar categorías activas:", err);
+            }
+        }
+
+        // Abrir modal de nuevo producto cargando las categorías activas
+        function abrirModalProducto() {
+            document.getElementById('formProducto').reset();
+            document.getElementById('prodId').value = '';
+            document.getElementById('tituloModalProducto').innerText = 'Registrar Nuevo Producto';
+            cargarCategoriasActivasEnSelect();
+            abrirModal('modalProducto');
+        }
+
+        const cargarProductosAdmin = async () => {
+            try {
+                const searchEl = document.getElementById('searchProductoAdmin');
+                const q = searchEl ? searchEl.value : '';
+                
+                const res = await fetch(`${API}/productos?q=${q}`);
+                listaProductosCache = await res.json();
+                renderizarTablaProductos();
             } catch (err) { console.error(err); }
         };
+
+        const renderizarTablaProductos = () => {
+            const inicio = (paginaActualProd - 1) * porPaginaProd;
+            const fin = inicio + porPaginaProd;
+            const datosPagina = listaProductosCache.slice(inicio, fin);
+
+            const tbody = document.getElementById('tablaProductosAdmin');
+            if (!tbody) return;
+
+            if (datosPagina.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No se encontraron productos.</td></tr>`;
+                const pagUl = document.getElementById('paginationProductos');
+                if (pagUl) pagUl.innerHTML = '';
+                return;
+            }
+
+            tbody.innerHTML = datosPagina.map(p => `
+                <tr>
+                    <td>${p.id_producto}</td>
+                    <td class="fw-bold">${p.nombre_producto}</td>
+                    <td><span class="badge bg-secondary">${p.nombre_categoria || '-'}</span></td>
+                    <td>$${parseFloat(p.precio_base).toFixed(2)}</td>
+                    <td>${p.descripcion || '-'}</td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-info text-white me-1" title="Ver Historial" onclick="verDetalleProducto(${p.id_producto}, '${p.nombre_producto}')">👁️</button>
+                        <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="alert('Función editar producto en proceso')">✏️</button>
+                        <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarProducto(${p.id_producto})">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            renderizarPaginacionProductos();
+        };
+
+        const renderizarPaginacionProductos = () => {
+            const totalPaginas = Math.ceil(listaProductosCache.length / porPaginaProd);
+            const pagUl = document.getElementById('paginationProductos');
+            if (!pagUl) return;
+            if (totalPaginas <= 1) {
+                pagUl.innerHTML = '';
+                return;
+            }
+            let html = '';
+            for (let i = 1; i <= totalPaginas; i++) {
+                html += `<li class="page-item ${i === paginaActualProd ? 'active' : ''}"><button class="page-link" onclick="cambiarPaginaProd(${i})">${i}</button></li>`;
+            }
+            pagUl.innerHTML = html;
+        };
+
+        const cambiarPaginaProd = (p) => {
+            paginaActualProd = p;
+            renderizarTablaProductos();
+        };
+
+        // Ver historial de pedidos de un producto
+        async function verDetalleProducto(id, nombre) {
+            try {
+                const tituloEl = document.getElementById('tituloDetalleProducto');
+                if (tituloEl) tituloEl.innerText = `Historial de Pedidos: ${nombre}`;
+                
+                const res = await fetch(`${API}/productos/${id}/pedidos`);
+                const pedidos = await res.json();
+                
+                const tbody = document.getElementById('tablaDetallePedidosProducto');
+                if (tbody) {
+                    if (pedidos.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Este producto aún no registra ventas en pedidos.</td></tr>`;
+                    } else {
+                        tbody.innerHTML = pedidos.map(p => `
+                            <tr>
+                                <td>${p.id_pedido}</td>
+                                <td><span class="badge bg-dark">${p.codigo_unico}</span></td>
+                                <td>${new Date(p.fecha_pedido).toLocaleDateString()}</td>
+                                <td>${p.estado_pedido}</td>
+                                <td>${p.cantidad}</td>
+                                <td>$${parseFloat(p.subtotal).toFixed(2)}</td>
+                            </tr>
+                        `).join('');
+                    }
+                }
+                abrirModal('modalDetalleProducto');
+            } catch (err) { console.error(err); }
+        }
+
+        async function eliminarProducto(id) {
+            if (!confirm('¿Estás seguro de eliminar este producto?')) return;
+            const res = await fetch(`${API}/productos/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.error);
+            } else {
+                cargarProductosAdmin();
+            }
+        }
+
+        bindEvent('searchProductoAdmin', 'input', () => { paginaActualProd = 1; cargarProductosAdmin(); });
+
+        bindSubmit('formProducto', 'modalProducto', async () => {
+            const id = document.getElementById('prodId').value;
+            const method = id ? 'PUT' : 'POST';
+            const url = id ? `${API}/productos/${id}` : `${API}/productos`;
+
+            const res = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nombre_producto: document.getElementById('prodNombre').value,
+                    id_categoria: parseInt(document.getElementById('prodCategoria').value),
+                    precio_base: parseFloat(document.getElementById('prodPrecio').value),
+                    descripcion: document.getElementById('prodDescripcion').value
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.error);
+                throw new Error(data.error);
+            }
+            cargarProductosAdmin();
+        });
+
+        // Carga inicial
+        cargarProductosAdmin();
 
         bindEvent('searchCategoria', 'input', () => { paginaActualCat = 1; cargarCategorias(); });
         bindEvent('filterEstadoCat', 'change', () => { paginaActualCat = 1; cargarCategorias(); });
