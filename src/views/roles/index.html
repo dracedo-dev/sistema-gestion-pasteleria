@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Roles - Admin Pastelería</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    <div id="header-container"></div>
+
+    <div class="container mt-4">
+        <h2 class="mb-4">Gestión de Roles</h2>
+
+        <div class="card shadow p-4 mb-4 bg-white rounded">
+            <div class="row mb-3">
+                <div class="col-md-8">
+                    <input type="text" id="searchRol" class="form-control" placeholder="Buscar por ID, nombre o descripción...">
+                </div>
+                <div class="col-md-4 text-end">
+                    <button class="btn btn-success w-100" onclick="abrirModalRol()">+ Nuevo Rol</button>
+                </div>
+            </div>
+            <table class="table table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre del Rol</th>
+                        <th>Descripción</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaRoles"></tbody>
+            </table>
+            <nav class="mt-3">
+                <ul class="pagination justify-content-center" id="paginationRoles"></ul>
+            </nav>
+        </div>
+    </div>
+
+    <!-- MODAL CREAR / EDITAR ROL -->
+    <div class="modal fade" id="modalRol" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="tituloModalRol">Registrar Nuevo Rol</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="formRol">
+                    <div class="modal-body">
+                        <input type="hidden" id="rolId">
+                        <div class="mb-3">
+                            <label class="form-label">Nombre del Rol *</label>
+                            <input type="text" id="rolNombre" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Descripción</label>
+                            <textarea id="rolDescripcion" class="form-control" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-success">Guardar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DETALLE USUARIOS DEL ROL -->
+    <div class="modal fade" id="modalDetalleRol" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title" id="tituloDetalleRol">Usuarios Asignados</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <table class="table table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Usuario</th>
+                                <th>Email</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaDetalleUsuarios"></tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API = 'http://localhost:3000/api';
+
+        fetch('../partials/header.html')
+            .then(res => res.text())
+            .then(data => {
+                const headerContainer = document.getElementById('header-container');
+                if (headerContainer) headerContainer.innerHTML = data;
+            });
+
+        function abrirModal(modalId) {
+            const modalEl = document.getElementById(modalId);
+            if (modalEl) {
+                const modal = new bootstrap.Modal(modalEl);
+                modal.show();
+            }
+        }
+
+        function cerrarModal(modalId) {
+            const modalEl = document.getElementById(modalId);
+            if (modalEl) {
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+            }
+        }
+
+        const bindEvent = (id, event, cb) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener(event, cb);
+        };
+
+        const bindSubmit = (formId, modalId, cb) => {
+            const form = document.getElementById(formId);
+            if (form) {
+                form.onsubmit = async e => {
+                    e.preventDefault();
+                    try {
+                        await cb(e);
+                        cerrarModal(modalId);
+                        form.reset();
+                    } catch (err) {}
+                };
+            }
+        };
+
+        let paginaActualRol = 1;
+        const porPaginaRol = 5;
+        let listaRolesCache = [];
+
+        function abrirModalRol() {
+            document.getElementById('formRol').reset();
+            document.getElementById('rolId').value = '';
+            document.getElementById('tituloModalRol').innerText = 'Registrar Nuevo Rol';
+            abrirModal('modalRol');
+        }
+
+        const cargarRoles = async () => {
+            try {
+                const searchEl = document.getElementById('searchRol');
+                const q = searchEl ? searchEl.value : '';
+                const res = await fetch(`${API}/roles?q=${q}`);
+                listaRolesCache = await res.json();
+                renderizarTablaRoles();
+            } catch (err) { console.error(err); }
+        };
+
+        const renderizarTablaRoles = () => {
+            const inicio = (paginaActualRol - 1) * porPaginaRol;
+            const fin = inicio + porPaginaRol;
+            const datosPagina = listaRolesCache.slice(inicio, fin);
+
+            const tbody = document.getElementById('tablaRoles');
+            if (!tbody) return;
+
+            if (datosPagina.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">No se encontraron roles.</td></tr>`;
+                const pagUl = document.getElementById('paginationRoles');
+                if (pagUl) pagUl.innerHTML = '';
+                return;
+            }
+
+            tbody.innerHTML = datosPagina.map(r => `
+                <tr>
+                    <td>${r.id_rol}</td>
+                    <td class="fw-bold">${r.nombre_rol}</td>
+                    <td>${r.descripcion || '-'}</td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-info text-white me-1" title="Ver Usuarios" onclick="verUsuariosDelRol(${r.id_rol}, '${r.nombre_rol}')">👁️</button>
+                        <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarRol(${r.id_rol}, '${r.nombre_rol}', '${r.descripcion || ''}')">✏️</button>
+                        <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarRol(${r.id_rol})">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            renderizarPaginacionRoles();
+        };
+
+        const renderizarPaginacionRoles = () => {
+            const totalPaginas = Math.ceil(listaRolesCache.length / porPaginaRol);
+            const pagUl = document.getElementById('paginationRoles');
+            if (!pagUl) return;
+            if (totalPaginas <= 1) { pagUl.innerHTML = ''; return; }
+            let html = '';
+            for (let i = 1; i <= totalPaginas; i++) {
+                html += `<li class="page-item ${i === paginaActualRol ? 'active' : ''}"><button class="page-link" onclick="cambiarPaginaRol(${i})">${i}</button></li>`;
+            }
+            pagUl.innerHTML = html;
+        };
+
+        const cambiarPaginaRol = (p) => { paginaActualRol = p; renderizarTablaRoles(); };
+
+        function prepararEditarRol(id, nombre, descripcion) {
+            document.getElementById('rolId').value = id;
+            document.getElementById('rolNombre').value = nombre;
+            document.getElementById('rolDescripcion').value = descripcion;
+            document.getElementById('tituloModalRol').innerText = 'Editar Rol';
+            abrirModal('modalRol');
+        }
+
+        async function verUsuariosDelRol(id, nombre) {
+            try {
+                document.getElementById('tituloDetalleRol').innerText = `Usuarios con el Rol: ${nombre}`;
+                const res = await fetch(`${API}/roles/${id}/usuarios`);
+                const usuarios = await res.json();
+                
+                const tbody = document.getElementById('tablaDetalleUsuarios');
+                if (tbody) {
+                    if (usuarios.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">No hay usuarios asignados a este rol.</td></tr>`;
+                    } else {
+                        tbody.innerHTML = usuarios.map(u => `
+                            <tr>
+                                <td>${u.id_usuario}</td>
+                                <td class="fw-bold">${u.nombre_usuario}</td>
+                                <td>${u.email || '-'}</td>
+                                <td>
+                                    <span class="badge ${u.activo !== false ? 'bg-success' : 'bg-secondary'}">
+                                        ${u.activo !== false ? 'Activo' : 'Inactivo'}
+                                    </span>
+                                </td>
+                            </tr>
+                        `).join('');
+                    }
+                }
+                abrirModal('modalDetalleRol');
+            } catch (err) { console.error(err); }
+        }
+
+        async function eliminarRol(id) {
+            if (!confirm('¿Estás seguro de eliminar este rol?')) return;
+            const res = await fetch(`${API}/roles/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (!res.ok) alert(data.error); else cargarRoles();
+        }
+
+        bindEvent('searchRol', 'input', () => { paginaActualRol = 1; cargarRoles(); });
+
+        bindSubmit('formRol', 'modalRol', async () => {
+            const id = document.getElementById('rolId').value;
+            const method = id ? 'PUT' : 'POST';
+            const url = id ? `${API}/roles/${id}` : `${API}/roles`;
+
+            const res = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nombre_rol: document.getElementById('rolNombre').value,
+                    descripcion: document.getElementById('rolDescripcion').value
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) { alert(data.error); throw new Error(data.error); }
+            cargarRoles();
+        });
+
+        cargarRoles();
+    </script>
+</body>
+</html>

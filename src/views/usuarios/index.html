@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Usuarios - Admin Pastelería</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    <!-- Header Compartido -->
+    <div id="header-container"></div>
+
+    <div class="container mt-4">
+        <h2 class="mb-4">Gestión de Usuarios</h2>
+
+        <div class="card shadow p-4 mb-4 bg-white rounded">
+            <div class="row mb-3">
+                <div class="col-md-8">
+                    <input type="text" id="searchUsuario" class="form-control" placeholder="Buscar por nombre o email...">
+                </div>
+                <div class="col-md-4 text-end">
+                    <button class="btn btn-success w-100" onclick="abrirModalUsuario()">+ Nuevo Usuario</button>
+                </div>
+            </div>
+            <table class="table table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre Completo</th>
+                        <th>Email</th>
+                        <th>Rol</th>
+                        <th>Estado</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaUsuarios"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- MODAL CREAR / EDITAR USUARIO -->
+    <div class="modal fade" id="modalUsuario" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="tituloModalUsuario">Registrar Usuario</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="formUsuario">
+                    <div class="modal-body">
+                        <input type="hidden" id="usuarioId">
+                        <div class="mb-3">
+                            <label class="form-label">Nombre Completo *</label>
+                            <input type="text" id="usrNombre" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email *</label>
+                            <input type="email" id="usrEmail" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Rol Asignado *</label>
+                            <select id="usrRol" class="form-select" required></select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-success">Guardar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API = 'http://localhost:3000/api';
+        let listaUsuariosCache = [];
+
+        // Cargar Header Compartido
+        fetch('../partials/header.html')
+            .then(res => res.text())
+            .then(data => {
+                const headerContainer = document.getElementById('header-container');
+                if (headerContainer) headerContainer.innerHTML = data;
+            });
+
+        // Cargar roles en el select del modal
+        async function cargarRolesEnSelect(idRolSeleccionado = null) {
+            try {
+                const res = await fetch(`${API}/roles`);
+                const roles = await res.json();
+                const select = document.getElementById('usrRol');
+                select.innerHTML = `<option value="">Seleccione un rol...</option>` +
+                    roles.map(r => `<option value="${r.id_rol}" ${r.id_rol === idRolSeleccionado ? 'selected' : ''}>${r.nombre_rol}</option>`).join('');
+            } catch (err) { console.error('Error al cargar roles:', err); }
+        }
+
+        // Abrir modal para crear
+        async function abrirModalUsuario() {
+            document.getElementById('formUsuario').reset();
+            document.getElementById('usuarioId').value = '';
+            document.getElementById('tituloModalUsuario').innerText = 'Registrar Nuevo Usuario';
+            await cargarRolesEnSelect();
+            const modal = new bootstrap.Modal(document.getElementById('modalUsuario'));
+            modal.show();
+        }
+
+        // Obtener y listar usuarios
+        const cargarUsuarios = async () => {
+            try {
+                const res = await fetch(`${API}/usuarios`);
+                listaUsuariosCache = await res.json();
+                renderizarTablaUsuarios(listaUsuariosCache);
+            } catch (err) { console.error('Error al cargar usuarios:', err); }
+        };
+
+        // Renderizar la tabla con el botón de estado interactivo y solo edición en acciones
+        const renderizarTablaUsuarios = (usuarios) => {
+            const tbody = document.getElementById('tablaUsuarios');
+            if (!tbody) return;
+
+            if (usuarios.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No se encontraron usuarios.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = usuarios.map(u => `
+                <tr>
+                    <td>${u.id_usuario}</td>
+                    <td class="fw-bold">${u.nombre_completo}</td>
+                    <td>${u.email}</td>
+                    <td><span class="badge bg-secondary">${u.nombre_rol || 'Sin Rol'}</span></td>
+                    <td>
+                        <button class="btn btn-sm ${u.activo ? 'btn-success' : 'btn-danger'}" onclick="toggleEstadoUsuario(${u.id_usuario})">
+                            ${u.activo ? 'Activo' : 'Inactivo'}
+                        </button>
+                    </td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-primary" title="Editar" onclick='prepararEditarUsuario(${u.id_usuario}, ${JSON.stringify(u.nombre_completo)}, ${JSON.stringify(u.email)}, ${u.id_rol})'>✏️</button>
+                    </td>
+                </tr>
+            `).join('');
+        };
+
+        // Función para cambiar el estado al hacer clic en el botón de la tabla
+        async function toggleEstadoUsuario(id) {
+            try {
+                const res = await fetch(`${API}/usuarios/${id}/estado`, { method: 'PATCH' });
+                if (res.ok) {
+                    cargarUsuarios();
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Error al cambiar el estado');
+                }
+            } catch (err) { console.error('Error:', err); }
+        }
+
+        // Preparar modal para editar
+        async function prepararEditarUsuario(id, nombre, email, idRol) {
+            document.getElementById('usuarioId').value = id;
+            document.getElementById('usrNombre').value = nombre;
+            document.getElementById('usrEmail').value = email;
+            document.getElementById('tituloModalUsuario').innerText = 'Editar Usuario';
+            await cargarRolesEnSelect(idRol);
+            const modal = new bootstrap.Modal(document.getElementById('modalUsuario'));
+            modal.show();
+        }
+
+        // Eliminar (dar de baja lógica) usuario
+        async function eliminarUsuario(id) {
+            if (!confirm('¿Estás seguro de dar de baja a este usuario?')) return;
+            try {
+                const res = await fetch(`${API}/usuarios/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    cargarUsuarios();
+                } else {
+                    const data = await res.json();
+                    alert(data.error);
+                }
+            } catch (err) { console.error('Error al eliminar:', err); }
+        }
+
+        // Guardar (Crear o Actualizar)
+        document.getElementById('formUsuario').onsubmit = async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('usuarioId').value;
+            const method = id ? 'PUT' : 'POST';
+            const url = id ? `${API}/usuarios/${id}` : `${API}/usuarios`;
+
+            try {
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nombre_completo: document.getElementById('usrNombre').value,
+                        email: document.getElementById('usrEmail').value,
+                        id_rol: parseInt(document.getElementById('usrRol').value)
+                    })
+                });
+
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.error || 'Error al guardar');
+                    return;
+                }
+
+                bootstrap.Modal.getInstance(document.getElementById('modalUsuario')).hide();
+                cargarUsuarios();
+            } catch (err) { console.error('Error al enviar formulario:', err); }
+        };
+
+        // Buscador en tiempo real
+        const searchInput = document.getElementById('searchUsuario');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                const valor = e.target.value.toLowerCase();
+                const filtrados = listaUsuariosCache.filter(u => 
+                    u.nombre_completo.toLowerCase().includes(valor) || 
+                    u.email.toLowerCase().includes(valor)
+                );
+                renderizarTablaUsuarios(filtrados);
+            });
+        }
+
+        // Inicializar carga al abrir la vista
+        cargarUsuarios();
+    </script>
+</body>
+</html>

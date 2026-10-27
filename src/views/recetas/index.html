@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Recetas (Escandallo) - Admin Pastelería</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    <!-- Header Compartido -->
+    <div id="header-container"></div>
+
+    <div class="container mt-4">
+        <h2 class="mb-4">Gestión de Recetas (Escandallo)</h2>
+
+        <!-- SECCIÓN RECETAS -->
+        <div class="card shadow p-4 mb-4 bg-white rounded">
+            <div class="row mb-3">
+                <div class="col-md-12">
+                    <input type="text" id="searchReceta" class="form-control" placeholder="Buscar producto para gestionar su receta...">
+                </div>
+            </div>
+            <table class="table table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Producto</th>
+                        <th>Categoría</th>
+                        <th>Precio Base</th>
+                        <th>Estado</th>
+                        <th class="text-center">Acciones (Receta)</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaRecetasProductos"></tbody>
+            </table>
+            <nav class="mt-3">
+                <ul class="pagination justify-content-center" id="paginationRecetas"></ul>
+            </nav>
+        </div>
+    </div>
+
+    <!-- MODAL GESTIÓN DE RECETA POR PRODUCTO -->
+    <div class="modal fade" id="modalGestionReceta" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="tituloGestionReceta">Gestionar Receta del Producto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="gestionProdId">
+                    
+                    <!-- Formulario interno para agregar un insumo a la receta -->
+                    <form id="formAgregarInsumoReceta" class="row g-3 mb-4 p-3 bg-light border rounded">
+                        <h6 class="text-secondary fw-bold">Agregar Insumo a la Receta</h6>
+                        <div class="col-md-6">
+                            <label class="form-label">Insumo</label>
+                            <select id="selectInsumoReceta" class="form-select" required></select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Cantidad Requerida</label>
+                            <input type="number" step="0.01" id="inputCantidadReceta" class="form-control" placeholder="Ej: 0.50" required>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="submit" class="btn btn-success w-100">+ Agregar</button>
+                        </div>
+                    </form>
+
+                    <hr>
+
+                    <!-- Tabla de insumos actuales de la receta -->
+                    <h6 class="text-secondary fw-bold mb-3">Insumos actuales en la receta</h6>
+                    <table class="table table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th>Insumo</th>
+                                <th>Cantidad</th>
+                                <th>Unidad</th>
+                                <th class="text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaInsumosRecetaActual"></tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API = 'http://localhost:3000/api';
+
+        // Carga automática del Header común
+        fetch('../partials/header.html')
+            .then(res => res.text())
+            .then(data => {
+                const headerContainer = document.getElementById('header-container');
+                if (headerContainer) headerContainer.innerHTML = data;
+            });
+
+        function abrirModal(modalId) {
+            const modalEl = document.getElementById(modalId);
+            if (modalEl) {
+                const modal = new bootstrap.Modal(modalEl);
+                modal.show();
+            }
+        }
+
+        function cerrarModal(modalId) {
+            const modalEl = document.getElementById(modalId);
+            if (modalEl) {
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+            }
+        }
+
+        const bindEvent = (id, event, cb) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener(event, cb);
+        };
+
+        // ================= RECETAS / ESCANDALLO POR PRODUCTO =================
+        let paginaActualRec = 1;
+        const porPaginaRec = 5;
+        let listaProductosRecetasCache = [];
+        let productoActualId = null;
+
+        const cargarRecetasProductos = async () => {
+            try {
+                const searchEl = document.getElementById('searchReceta');
+                const q = searchEl ? searchEl.value : '';
+                const res = await fetch(`${API}/productos?q=${q}`);
+                listaProductosRecetasCache = await res.json();
+                renderizarTablaRecetasProductos();
+            } catch (err) { console.error(err); }
+        };
+
+        const renderizarTablaRecetasProductos = () => {
+            const inicio = (paginaActualRec - 1) * porPaginaRec;
+            const fin = inicio + porPaginaRec;
+            const datosPagina = listaProductosRecetasCache.slice(inicio, fin);
+
+            const tbody = document.getElementById('tablaRecetasProductos');
+            if (!tbody) return;
+
+            if (datosPagina.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No se encontraron productos.</td></tr>`;
+                const pagUl = document.getElementById('paginationRecetas');
+                if (pagUl) pagUl.innerHTML = '';
+                return;
+            }
+
+            tbody.innerHTML = datosPagina.map(p => `
+                <tr>
+                    <td>${p.id_producto}</td>
+                    <td class="fw-bold">${p.nombre_producto}</td>
+                    <td><span class="badge bg-secondary">${p.nombre_categoria || '-'}</span></td>
+                    <td>$${parseFloat(p.precio_base).toFixed(2)}</td>
+                    <td>
+                        <span class="badge ${p.activo !== false ? 'bg-success' : 'bg-secondary'}">
+                            ${p.activo !== false ? 'Activo' : 'Inactivo'}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-info text-white" title="Gestionar Receta" onclick="abrirGestionReceta(${p.id_producto}, '${p.nombre_producto}')">
+                            📝 Gestionar Receta
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+
+            renderizarPaginacionRecetasProductos();
+        };
+
+        const renderizarPaginacionRecetasProductos = () => {
+            const totalPaginas = Math.ceil(listaProductosRecetasCache.length / porPaginaRec);
+            const pagUl = document.getElementById('paginationRecetas');
+            if (!pagUl) return;
+            if (totalPaginas <= 1) { pagUl.innerHTML = ''; return; }
+            let html = '';
+            for (let i = 1; i <= totalPaginas; i++) {
+                html += `<li class="page-item ${i === paginaActualRec ? 'active' : ''}"><button class="page-link" onclick="cambiarPaginaRec(${i})">${i}</button></li>`;
+            }
+            pagUl.innerHTML = html;
+        };
+
+        const cambiarPaginaRec = (p) => { paginaActualRec = p; renderizarTablaRecetasProductos(); };
+
+        async function abrirGestionReceta(idProducto, nombreProducto) {
+            productoActualId = idProducto;
+            document.getElementById('tituloGestionReceta').innerText = `Receta para: ${nombreProducto}`;
+            
+            await cargarSelectInsumosModal();
+            await cargarInsumosDeRecetaActual(idProducto);
+            
+            abrirModal('modalGestionReceta');
+        }
+
+        async function cargarSelectInsumosModal() {
+            try {
+                const res = await fetch(`${API}/insumos`);
+                const insumos = await res.json();
+                const select = document.getElementById('selectInsumoReceta');
+                if (select) {
+                    select.innerHTML = `<option value="">Seleccione un insumo...</option>` +
+                        insumos.map(i => `<option value="${i.id_insumo}">${i.nombre_insumo} (${i.unidad_medida})</option>`).join('');
+                }
+            } catch (err) { console.error(err); }
+        }
+
+        async function cargarInsumosDeRecetaActual(idProducto) {
+            try {
+                const res = await fetch(`${API}/escandallo`);
+                const escandallo = await res.json();
+                const insumosReceta = escandallo.filter(e => e.id_producto === idProducto);
+
+                const tbody = document.getElementById('tablaInsumosRecetaActual');
+                if (!tbody) return;
+
+                if (insumosReceta.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">Este producto aún no tiene insumos agregados en su receta.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = insumosReceta.map(r => `
+                    <tr>
+                        <td class="fw-bold">${r.nombre_insumo}</td>
+                        <td>${r.cantidad_requerida}</td>
+                        <td><span class="badge bg-secondary">${r.unidad_medida}</span></td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-danger" onclick="eliminarInsumoDeReceta(${r.id_escandallo})">🗑️ Quitar</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) { console.error(err); }
+        }
+
+        const formAgregarInsumo = document.getElementById('formAgregarInsumoReceta');
+        if (formAgregarInsumo) {
+            formAgregarInsumo.onsubmit = async (e) => {
+                e.preventDefault();
+                try {
+                    const res = await fetch(`${API}/escandallo`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id_producto: productoActualId,
+                            id_insumo: parseInt(document.getElementById('selectInsumoReceta').value),
+                            cantidad_requerida: parseFloat(document.getElementById('inputCantidadReceta').value)
+                        })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) { alert(data.error); }
+                    else {
+                        document.getElementById('inputCantidadReceta').value = '';
+                        document.getElementById('selectInsumoReceta').value = '';
+                        await cargarInsumosDeRecetaActual(productoActualId);
+                    }
+                } catch (err) { console.error(err); }
+            };
+        }
+
+        async function eliminarInsumoDeReceta(idEscandallo) {
+            if (!confirm('¿Estás seguro de quitar este insumo de la receta?')) return;
+            try {
+                const res = await fetch(`${API}/escandallo/${idEscandallo}`, { method: 'DELETE' });
+                if (res.ok) {
+                    await cargarInsumosDeRecetaActual(productoActualId);
+                }
+            } catch (err) { console.error(err); }
+        }
+
+        bindEvent('searchReceta', 'input', () => { paginaActualRec = 1; cargarRecetasProductos(); });
+
+        // Carga inicial
+        cargarRecetasProductos();
+    </script>
+</body>
+</html>

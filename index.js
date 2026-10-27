@@ -8,20 +8,28 @@ const categoriasRoutes = require('./src/routes/categorias');
 const insumosRoutes = require('./src/routes/insumos');         // <--- Importar
 const escandalloRoutes = require('./src/routes/escandallo');   // <--- Importar
 const clientesRoutes = require('./src/routes/clientes');     // <--- Importar
+const rolesRoutes = require('./src/routes/roles');           // <--- Importar
+const usuariosRoutes = require('./src/routes/usuarios');         // <--- Importar
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
+// Middleware para leer JSON y servir archivos estáticos de la carpeta views
+app.use(express.json());
+app.use(express.static('src/views'));
+
 // Rutas
-app.use('/api/productos', productosRoutes);
-app.use('/api/categorias', categoriasRoutes);
-app.use('/api/insumos', insumosRoutes);                        // <--- Usar
-app.use('/api/escandallo', escandalloRoutes);                  // <--- Usar
-app.use('/api/clientes', clientesRoutes);                      // <--- Usar
-app.use(express.static(path.join(__dirname, 'public')));
+app.use('/api/roles', require('./src/routes/roles'));
+app.use('/api/categorias', require('./src/routes/categorias'));
+app.use('/api/insumos', require('./src/routes/insumos'));
+app.use('/api/clientes', require('./src/routes/clientes'));
+app.use('/api/productos', require('./src/routes/productos'));
+app.use('/api/escandallo', require('./src/routes/escandallo'));
+app.use('/api/usuarios', usuariosRoutes);
+app.use(express.static('src/views'));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en el puerto ${PORT}`);
+app.listen(3000, () => {
+    console.log('Servidor corriendo en el puerto 3000');
 });

@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { getRecetaPorProducto, addInsumoAReceta } = require('../controllers/escandallo');
+const { getEscandallo, createEscandallo, updateEscandallo, deleteEscandallo } = require('../controllers/escandallo');
 
-router.get('/producto/:id_producto', getRecetaPorProducto);
-router.post('/', addInsumoAReceta);
+router.get('/', getEscandallo);
+router.post('/', createEscandallo);
+router.put('/:id', updateEscandallo);
+router.delete('/:id', deleteEscandallo);
 
 module.exports = router;

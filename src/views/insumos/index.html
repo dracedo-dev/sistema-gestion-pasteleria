@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Insumos - Admin Pastelería</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    <!-- Header Compartido -->
+    <div id="header-container"></div>
+
+    <div class="container mt-4">
+        <h2 class="mb-4">Gestión de Insumos</h2>
+
+        <!-- SECCIÓN INSUMOS -->
+        <div class="card shadow p-4 mb-4 bg-white rounded">
+            <div class="row mb-3">
+                <div class="col-md-8">
+                    <input type="text" id="searchInsumo" class="form-control" placeholder="Buscar por ID, nombre o unidad de medida...">
+                </div>
+                <div class="col-md-4 text-end">
+                    <button class="btn btn-success w-100" onclick="abrirModalInsumo()">+ Nuevo Insumo</button>
+                </div>
+            </div>
+            <table class="table table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Insumo</th>
+                        <th>Unidad</th>
+                        <th>Stock Actual</th>
+                        <th>Stock Mínimo</th>
+                        <th>Costo Unitario</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaInsumos"></tbody>
+            </table>
+            <nav class="mt-3">
+                <ul class="pagination justify-content-center" id="paginationInsumos"></ul>
+            </nav>
+        </div>
+    </div>
+
+    <!-- MODAL CREAR / EDITAR INSUMO -->
+    <div class="modal fade" id="modalInsumo" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="tituloModalInsumo">Registrar Nuevo Insumo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="formInsumo">
+                    <div class="modal-body">
+                        <input type="hidden" id="insumoId">
+                        <div class="mb-3">
+                            <label class="form-label">Nombre del Insumo *</label>
+                            <input type="text" id="insNombre" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Unidad de Medida (ej: kg, gr, lt, un) *</label>
+                            <input type="text" id="insUnidad" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Stock Actual *</label>
+                            <input type="number" step="0.01" id="insStockActual" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Stock Mínimo *</label>
+                            <input type="number" step="0.01" id="insStockMinimo" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Costo Unitario ($) *</label>
+                            <input type="number" step="0.01" id="insCosto" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-success">Guardar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API = 'http://localhost:3000/api';
+
+        // Carga automática del Header común
+        fetch('../partials/header.html')
+            .then(res => res.text())
+            .then(data => {
+                const headerContainer = document.getElementById('header-container');
+                if (headerContainer) headerContainer.innerHTML = data;
+            });
+
+        function abrirModal(modalId) {
+            const modalEl = document.getElementById(modalId);
+            if (modalEl) {
+                const modal = new bootstrap.Modal(modalEl);
+                modal.show();
+            }
+        }
+
+        function cerrarModal(modalId) {
+            const modalEl = document.getElementById(modalId);
+            if (modalEl) {
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+            }
+        }
+
+        const bindEvent = (id, event, cb) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener(event, cb);
+        };
+
+        const bindSubmit = (formId, modalId, cb) => {
+            const form = document.getElementById(formId);
+            if (form) {
+                form.onsubmit = async e => {
+                    e.preventDefault();
+                    try {
+                        await cb(e);
+                        cerrarModal(modalId);
+                        form.reset();
+                    } catch (err) {}
+                };
+            }
+        };
+
+        // ================= INSUMOS =================
+        let paginaActualIns = 1;
+        const porPaginaIns = 5;
+        let listaInsumosCache = [];
+
+        function abrirModalInsumo() {
+            document.getElementById('formInsumo').reset();
+            document.getElementById('insumoId').value = '';
+            document.getElementById('tituloModalInsumo').innerText = 'Registrar Nuevo Insumo';
+            abrirModal('modalInsumo');
+        }
+
+        const cargarInsumos = async () => {
+            try {
+                const searchEl = document.getElementById('searchInsumo');
+                const q = searchEl ? searchEl.value : '';
+                const res = await fetch(`${API}/insumos?q=${q}`);
+                listaInsumosCache = await res.json();
+                renderizarTablaInsumos();
+            } catch (err) { console.error(err); }
+        };
+
+        const renderizarTablaInsumos = () => {
+            const inicio = (paginaActualIns - 1) * porPaginaIns;
+            const fin = inicio + porPaginaIns;
+            const datosPagina = listaInsumosCache.slice(inicio, fin);
+
+            const tbody = document.getElementById('tablaInsumos');
+            if (!tbody) return;
+
+            if (datosPagina.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No se encontraron insumos.</td></tr>`;
+                const pagUl = document.getElementById('paginationInsumos');
+                if (pagUl) pagUl.innerHTML = '';
+                return;
+            }
+
+            tbody.innerHTML = datosPagina.map(i => `
+                <tr>
+                    <td>${i.id_insumo}</td>
+                    <td class="fw-bold">${i.nombre_insumo}</td>
+                    <td>${i.unidad_medida}</td>
+                    <td>${i.stock_actual}</td>
+                    <td>${i.stock_minimo}</td>
+                    <td>$${parseFloat(i.costo_unitario).toFixed(2)}</td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarInsumo(${i.id_insumo}, '${i.nombre_insumo}', '${i.unidad_medida}', ${i.stock_actual}, ${i.stock_minimo}, ${i.costo_unitario})">✏️</button>
+                        <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarInsumo(${i.id_insumo})">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            renderizarPaginacionInsumos();
+        };
+
+        const renderizarPaginacionInsumos = () => {
+            const totalPaginas = Math.ceil(listaInsumosCache.length / porPaginaIns);
+            const pagUl = document.getElementById('paginationInsumos');
+            if (!pagUl) return;
+            if (totalPaginas <= 1) { pagUl.innerHTML = ''; return; }
+            let html = '';
+            for (let j = 1; j <= totalPaginas; j++) {
+                html += `<li class="page-item ${j === paginaActualIns ? 'active' : ''}"><button class="page-link" onclick="cambiarPaginaIns(${j})">${j}</button></li>`;
+            }
+            pagUl.innerHTML = html;
+        };
+
+        const cambiarPaginaIns = (p) => { paginaActualIns = p; renderizarTablaInsumos(); };
+
+        function prepararEditarInsumo(id, nombre, unidad, stockAct, stockMin, costo) {
+            document.getElementById('insumoId').value = id;
+            document.getElementById('insNombre').value = nombre;
+            document.getElementById('insUnidad').value = unidad;
+            document.getElementById('insStockActual').value = stockAct;
+            document.getElementById('insStockMinimo').value = stockMin;
+            document.getElementById('insCosto').value = costo;
+            document.getElementById('tituloModalInsumo').innerText = 'Editar Insumo';
+            abrirModal('modalInsumo');
+        }
+
+        async function eliminarInsumo(id) {
+            if (!confirm('¿Estás seguro de eliminar este insumo?')) return;
+            const res = await fetch(`${API}/insumos/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (!res.ok) alert(data.error); else cargarInsumos();
+        }
+
+        bindEvent('searchInsumo', 'input', () => { paginaActualIns = 1; cargarInsumos(); });
+
+        bindSubmit('formInsumo', 'modalInsumo', async () => {
+            const id = document.getElementById('insumoId').value;
+            const method = id ? 'PUT' : 'POST';
+            const url = id ? `${API}/insumos/${id}` : `${API}/insumos`;
+
+            const res = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nombre_insumo: document.getElementById('insNombre').value,
+                    unidad_medida: document.getElementById('insUnidad').value,
+                    stock_actual: parseFloat(document.getElementById('insStockActual').value),
+                    stock_minimo: parseFloat(document.getElementById('insStockMinimo').value),
+                    costo_unitario: parseFloat(document.getElementById('insCosto').value)
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) { alert(data.error); throw new Error(data.error); }
+            cargarInsumos();
+        });
+
+        // Carga inicial
+        cargarInsumos();
+    </script>
+</body>
+</html>

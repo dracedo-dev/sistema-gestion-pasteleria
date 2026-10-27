@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Categorías - Admin Pastelería</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    <!-- Header Compartido -->
+    <div id="header-container"></div>
+
+    <div class="container mt-4">
+        <h2 class="mb-4">Gestión de Categorías</h2>
+
+        <!-- SECCIÓN CATEGORÍAS -->
+        <div class="card shadow p-4 mb-4 bg-white rounded">
+            <div class="row mb-3">
+                <div class="col-md-5">
+                    <input type="text" id="searchCategoria" class="form-control" placeholder="Buscar categoría...">
+                </div>
+                <div class="col-md-3">
+                    <select id="filterEstadoCat" class="form-select">
+                        <option value="">Todos los estados</option>
+                        <option value="true">Activos</option>
+                        <option value="false">Inactivos</option>
+                    </select>
+                </div>
+                <div class="col-md-4 text-end">
+                    <button class="btn btn-success w-100" onclick="abrirModalCategoria()">+ Nueva Categoría</button>
+                </div>
+            </div>
+            <table class="table table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre</th>
+                        <th>Estado</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaCategorias"></tbody>
+            </table>
+            <nav class="mt-3">
+                <ul class="pagination justify-content-center" id="paginationCategorias"></ul>
+            </nav>
+        </div>
+    </div>
+
+    <!-- MODAL CREAR / EDITAR CATEGORÍA -->
+    <div class="modal fade" id="modalCategoria" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="tituloModalCategoria">Registrar Nueva Categoría</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="formCategoria">
+                    <div class="modal-body">
+                        <input type="hidden" id="categoriaId">
+                        <div class="mb-3">
+                            <label class="form-label">Nombre de la Categoría *</label>
+                            <input type="text" id="catNombre" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-success">Guardar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DETALLE PRODUCTOS DE CATEGORÍA -->
+    <div class="modal fade" id="modalDetalleCategoria" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title" id="tituloDetalleCategoria">Productos en la Categoría</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <table class="table table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Producto</th>
+                                <th>Precio Base</th>
+                                <th>Descripción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaDetalleProductos"></tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API = 'http://localhost:3000/api';
+
+        // Carga automática del Header común
+        fetch('../partials/header.html')
+            .then(res => res.text())
+            .then(data => {
+                const headerContainer = document.getElementById('header-container');
+                if (headerContainer) headerContainer.innerHTML = data;
+            });
+
+        function abrirModal(modalId) {
+            const modalEl = document.getElementById(modalId);
+            if (modalEl) {
+                const modal = new bootstrap.Modal(modalEl);
+                modal.show();
+            }
+        }
+
+        function cerrarModal(modalId) {
+            const modalEl = document.getElementById(modalId);
+            if (modalEl) {
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+            }
+        }
+
+        const bindEvent = (id, event, cb) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener(event, cb);
+        };
+
+        const bindSubmit = (formId, modalId, cb) => {
+            const form = document.getElementById(formId);
+            if (form) {
+                form.onsubmit = async e => {
+                    e.preventDefault();
+                    try {
+                        await cb(e);
+                        cerrarModal(modalId);
+                        form.reset();
+                    } catch (err) {}
+                };
+            }
+        };
+
+        // ================= CATEGORÍAS =================
+        let paginaActualCat = 1;
+        const porPaginaCat = 5;
+        let listaCategoriasCache = [];
+
+        function abrirModalCategoria() {
+            document.getElementById('formCategoria').reset();
+            document.getElementById('categoriaId').value = '';
+            document.getElementById('tituloModalCategoria').innerText = 'Registrar Nueva Categoría';
+            abrirModal('modalCategoria');
+        }
+
+        const cargarCategorias = async () => {
+            try {
+                const searchEl = document.getElementById('searchCategoria');
+                const filterEl = document.getElementById('filterEstadoCat');
+                const q = searchEl ? searchEl.value : '';
+                const estado = filterEl ? filterEl.value : '';
+                
+                const res = await fetch(`${API}/categorias?q=${q}&estado=${estado}`);
+                listaCategoriasCache = await res.json();
+                renderizarTablaCategorias();
+            } catch (err) { console.error(err); }
+        };
+
+        const renderizarTablaCategorias = () => {
+            const inicio = (paginaActualCat - 1) * porPaginaCat;
+            const fin = inicio + porPaginaCat;
+            const datosPagina = listaCategoriasCache.slice(inicio, fin);
+
+            const tbody = document.getElementById('tablaCategorias');
+            if (!tbody) return;
+
+            if (datosPagina.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">No se encontraron categorías.</td></tr>`;
+                const pagUl = document.getElementById('paginationCategorias');
+                if (pagUl) pagUl.innerHTML = '';
+                return;
+            }
+
+            tbody.innerHTML = datosPagina.map(c => `
+                <tr>
+                    <td>${c.id_categoria}</td>
+                    <td class="fw-bold">${c.nombre_categoria}</td>
+                    <td>
+                        <button class="btn btn-sm ${c.activo !== false ? 'btn-success' : 'btn-secondary'}" onclick="toggleEstadoCategoria(${c.id_categoria}, ${c.activo !== false})">
+                            ${c.activo !== false ? 'Activo' : 'Inactivo'}
+                        </button>
+                    </td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-info text-white me-1" title="Ver Productos" onclick="verDetalleCategoria(${c.id_categoria}, '${c.nombre_categoria}')">👁️</button>
+                        <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarCategoria(${c.id_categoria}, '${c.nombre_categoria}')">✏️</button>
+                        <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarCategoria(${c.id_categoria})">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            renderizarPaginacionCategorias();
+        };
+
+        async function toggleEstadoCategoria(id, estadoActual) {
+            try {
+                const cat = listaCategoriasCache.find(c => c.id_categoria === id);
+                const nombre = cat ? cat.nombre_categoria : '';
+
+                const res = await fetch(`${API}/categorias/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nombre_categoria: nombre, activo: !estadoActual })
+                });
+
+                if (res.ok) { cargarCategorias(); } 
+                else {
+                    const data = await res.json();
+                    alert(data.error || 'Error al actualizar el estado');
+                }
+            } catch (err) { console.error(err); }
+        }
+
+        const renderizarPaginacionCategorias = () => {
+            const totalPaginas = Math.ceil(listaCategoriasCache.length / porPaginaCat);
+            const pagUl = document.getElementById('paginationCategorias');
+            if (!pagUl) return;
+            if (totalPaginas <= 1) { pagUl.innerHTML = ''; return; }
+            let html = '';
+            for (let i = 1; i <= totalPaginas; i++) {
+                html += `<li class="page-item ${i === paginaActualCat ? 'active' : ''}"><button class="page-link" onclick="cambiarPaginaCat(${i})">${i}</button></li>`;
+            }
+            pagUl.innerHTML = html;
+        };
+
+        const cambiarPaginaCat = (p) => { paginaActualCat = p; renderizarTablaCategorias(); };
+
+        function prepararEditarCategoria(id, nombre) {
+            document.getElementById('categoriaId').value = id;
+            document.getElementById('catNombre').value = nombre;
+            document.getElementById('tituloModalCategoria').innerText = 'Editar Categoría';
+            abrirModal('modalCategoria');
+        }
+
+        async function verDetalleCategoria(id, nombre) {
+            try {
+                const tituloEl = document.getElementById('tituloDetalleCategoria');
+                if (tituloEl) tituloEl.innerText = `Productos en la Categoría: ${nombre}`;
+                const res = await fetch(`${API}/categorias/${id}/productos`);
+                const productos = await res.json();
+                
+                const tbody = document.getElementById('tablaDetalleProductos');
+                if (tbody) {
+                    if (productos.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">No hay productos registrados en esta categoría.</td></tr>`;
+                    } else {
+                        tbody.innerHTML = productos.map(p => `
+                            <tr>
+                                <td>${p.id_producto}</td>
+                                <td class="fw-bold">${p.nombre_producto}</td>
+                                <td>$${p.precio_base}</td>
+                                <td>${p.descripcion || '-'}</td>
+                            </tr>
+                        `).join('');
+                    }
+                }
+                abrirModal('modalDetalleCategoria');
+            } catch (err) { console.error(err); }
+        }
+
+        async function eliminarCategoria(id) {
+            if (!confirm('¿Estás seguro de eliminar esta categoría?')) return;
+            const res = await fetch(`${API}/categorias/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (!res.ok) alert(data.error); else cargarCategorias();
+        }
+
+        bindEvent('searchCategoria', 'input', () => { paginaActualCat = 1; cargarCategorias(); });
+        bindEvent('filterEstadoCat', 'change', () => { paginaActualCat = 1; cargarCategorias(); });
+
+        bindSubmit('formCategoria', 'modalCategoria', async () => {
+            const id = document.getElementById('categoriaId').value;
+            const method = id ? 'PUT' : 'POST';
+            const url = id ? `${API}/categorias/${id}` : `${API}/categorias`;
+
+            const res = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nombre_categoria: document.getElementById('catNombre').value })
+            });
+            const data = await res.json();
+            if (!res.ok) { alert(data.error); throw new Error(data.error); }
+            cargarCategorias();
+        });
+
+        // Carga inicial
+        cargarCategorias();
+    </script>
+</body>
+</html>
