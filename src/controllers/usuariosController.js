@@ -1,37 +1,124 @@
 const db = require('../config/db');
+const bcrypt = require('bcryptjs'); // Asegúrate de tenerlo instalado si manejas hashes, o ajusta la validación
+
+// Iniciar sesión con validación de contraseña para administradores
+const loginUsuario = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const query = `
+            SELECT u.id_usuario, u.nombre_completo, u.email, u.password_hash, u.activo, r.nombre_rol 
+            FROM usuarios u 
+            LEFT JOIN roles r ON u.id_rol = r.id_rol 
+            WHERE u.email = $1 AND u.activo = true
+        `;
+        const { rows } = await db.query(query, [email]);
+
+        if (rows.length === 0) {
+            return res.status(401).json({ error: 'Credenciales inválidas o usuario inactivo' });
+        }
+
+        const usuario = rows[0];
+        const esAdmin = usuario.nombre_rol && usuario.nombre_rol.toLowerCase() === 'administrador';
+
+        // Si es Administrador (u otro rol interno), exigimos y validamos contraseña
+        if (esAdmin) {
+            if (!password) {
+                return res.status(400).json({ error: 'Se requiere contraseña para cuentas administrativas' });
+            }
+            // Si usas bcrypt:
+            // const passwordValid = await bcrypt.compare(password, usuario.password_hash);
+            // Si guardas la contraseña en texto plano temporalmente para pruebas:
+            const passwordValid = (password === usuario.password_hash); 
+
+            if (!passwordValid) {
+                return res.status(401).json({ error: 'Contraseña incorrecta' });
+            }
+        }
+
+        // Limpiamos el hash antes de enviarlo al cliente
+        delete usuario.password_hash;
+
+        res.json({
+            message: 'Login exitoso',
+            usuario,
+            redireccion: esAdmin ? '/dashboardAdmin/index.html' : '/dashboardCliente/index.html'
+        });
+    } catch (err) {
+        console.error("Error en login:", err);
+        res.status(500).json({ error: 'Error en el servidor al intentar iniciar sesión' });
+    }
+};
+
+// Registrar nuevo usuario/cliente desde el login público
+const registrarCliente = async (req, res) => {
+    try {
+        const { nombre_completo, email, password } = req.body;
+
+        // Buscar el ID del rol "Cliente"
+        const rolRes = await db.query(`SELECT id_rol FROM roles WHERE LOWER(nombre_rol) LIKE '%cliente%' LIMIT 1`);
+        let idRolCliente = rolRes.rows.length > 0 ? rolRes.rows[0].id_rol : 2; // O el ID correspondiente
+
+        const insertQuery = `
+            INSERT INTO usuarios (nombre_completo, email, password_hash, id_rol, activo)
+            VALUES ($1, $2, $3, $4, true)
+            RETURNING id_usuario, nombre_completo, email
+        `;
+
+        const { rows } = await db.query(insertQuery, [nombre_completo, email, password, idRolCliente]);
+
+        res.status(201).json({
+            message: 'Cuenta registrada exitosamente',
+            usuario: rows[0]
+        });
+    } catch (err) {
+        // Código 23505 = Restricción Única Violada (Email duplicado)
+        if (err.code === '23505') {
+            return res.status(400).json({ error: 'El correo electrónico ya se encuentra registrado. Intenta iniciar sesión.' });
+        }
+        console.error("Error al registrar cuenta:", err);
+        res.status(500).json({ error: 'Error interno en el servidor' });
+    }
+};
 
 // Obtener todos los usuarios con su respectivo rol
 const obtenerUsuarios = async (req, res) => {
     try {
         const query = `
-            SELECT u.id_usuario, u.nombre_completo, u.email, u.activo, r.id_rol, r.nombre_rol 
+            SELECT u.id_usuario, u.nombre_completo, u.email, u.activo, u.id_rol, r.nombre_rol 
             FROM usuarios u 
-            LEFT JOIN roles r ON u.id_rol = r.id_rol
+            LEFT JOIN roles r ON u.id_rol = r.id_rol 
+            ORDER BY u.id_usuario ASC
         `;
         const { rows } = await db.query(query);
         res.json(rows);
     } catch (err) {
         console.error("Error al obtener usuarios:", err);
-        res.status(500).json({ error: 'Error al obtener los usuarios' });
+        res.status(500).json({ error: 'Error en el servidor al obtener usuarios' });
     }
 };
 
 // Crear un nuevo usuario
 const crearUsuario = async (req, res) => {
     try {
-        const { nombre_completo, email, id_rol } = req.body;
-        const password_hash = 'temp_password'; // Password temporal por defecto
+        const { nombre_completo, email, id_rol, password } = req.body;
+
+        // Si no mandan contraseña, podemos asignar una por defecto o temporal
+        const passwordFinal = password || '123456';
 
         const query = `
-            INSERT INTO usuarios (nombre_completo, email, id_rol, password_hash, activo) 
-            VALUES ($1, $2, $3, $4, true) 
-            RETURNING id_usuario, nombre_completo, email, id_rol, activo
+            INSERT INTO usuarios (nombre_completo, email, id_rol, password_hash, activo)
+            VALUES ($1, $2, $3, $4, true)
+            RETURNING id_usuario, nombre_completo, email
         `;
-        const { rows } = await db.query(query, [nombre_completo, email, id_rol, password_hash]);
-        res.json(rows[0]);
+        
+        const { rows } = await db.query(query, [nombre_completo, email, id_rol, passwordFinal]);
+        res.status(201).json({ message: 'Usuario creado exitosamente', usuario: rows[0] });
     } catch (err) {
+        if (err.code === '23505') {
+            return res.status(400).json({ error: 'El correo electrónico ya está registrado.' });
+        }
         console.error("Error al crear usuario:", err);
-        res.status(500).json({ error: 'Error al crear el usuario' });
+        res.status(500).json({ error: 'Error en el servidor al crear usuario' });
     }
 };
 
@@ -94,6 +181,7 @@ module.exports = {
     obtenerUsuarios,
     crearUsuario,
     actualizarUsuario,
-    eliminarUsuario,
-    cambiarEstadoUsuario
+    cambiarEstadoUsuario,
+    loginUsuario,
+    registrarCliente
 };

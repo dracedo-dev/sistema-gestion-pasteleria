@@ -20,6 +20,7 @@
   },
   "homepage": "https://github.com/dracedo-dev/sistema-gestion-pasteleria#readme",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^18.0.9",
     "express": "^5.3.0",

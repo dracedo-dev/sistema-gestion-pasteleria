@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestión de Usuarios - Admin Pastelería</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script>
+        // 1. Obtener la sesión guardada
+        const usuarioGuardado = JSON.parse(localStorage.getItem('usuarioLogueado'));
+
+        // 2. Verificar si no existe usuario O si el usuario NO es Administrador
+        if (!usuarioGuardado || !usuarioGuardado.nombre_rol || usuarioGuardado.nombre_rol.toLowerCase() !== 'administrador') {
+            // Redirigir al login
+            // Si tu servidor Express sirve la carpeta 'views' como estática, usa '/login.html'
+            // Si accedes directamente por archivo/ruta relativa, usa '../login.html'
+            window.location.href = '../login.html'; 
+        }
+    </script>
 </head>
 <body class="bg-light">
 
@@ -61,6 +73,12 @@
                         <div class="mb-3">
                             <label class="form-label">Rol Asignado *</label>
                             <select id="usrRol" class="form-select" required></select>
+                        </div>
+                        <!-- Campo de contraseña dinámico para roles administrativos -->
+                        <div class="mb-3 d-none" id="divPasswordAdmin">
+                            <label class="form-label">Contraseña de Acceso *</label>
+                            <input type="password" id="usrPassword" class="form-control" placeholder="Contraseña para el panel">
+                            <div class="form-text">Esta contraseña será requerida para que el administrador inicie sesión.</div>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -223,6 +241,54 @@
                 renderizarTablaUsuarios(filtrados);
             });
         }
+
+        document.getElementById('usrRol').addEventListener('change', function() {
+            const selectRol = this;
+            const textoRolSeleccionado = selectRol.options[selectRol.selectedIndex].text.toLowerCase();
+            const divPassword = document.getElementById('divPasswordAdmin');
+
+            // Si el rol seleccionado NO es cliente (ej: Administrador, empleado, etc.), mostramos el campo de contraseña
+            if (textoRolSeleccionado.includes('administrador') || !textoRolSeleccionado.includes('cliente')) {
+                divPassword.classList.remove('d-none');
+                document.getElementById('usrPassword').required = true;
+            } else {
+                divPassword.classList.add('d-none');
+                document.getElementById('usrPassword').required = false;
+                document.getElementById('usrPassword').value = '';
+            }
+        });
+
+        document.getElementById('formUsuario').onsubmit = async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('usuarioId').value;
+            const method = id ? 'PUT' : 'POST';
+            const url = id ? `${API}/usuarios/${id}` : `${API}/usuarios`;
+
+            // Recolectamos los datos del formulario
+            const datosUsuario = {
+                nombre_completo: document.getElementById('usrNombre').value,
+                email: document.getElementById('usrEmail').value,
+                id_rol: parseInt(document.getElementById('usrRol').value),
+                password: document.getElementById('usrPassword').value // Enviamos la contraseña si fue escrita
+            };
+
+            try {
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(datosUsuario)
+                });
+
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.error || 'Error al guardar');
+                    return;
+                }
+
+                bootstrap.Modal.getInstance(document.getElementById('modalUsuario')).hide();
+                cargarUsuarios();
+            } catch (err) { console.error('Error al enviar formulario:', err); }
+        };
 
         // Inicializar carga al abrir la vista
         cargarUsuarios();

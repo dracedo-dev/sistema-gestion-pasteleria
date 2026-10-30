@@ -1,14 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const { getRoles, createRol, updateRol, deleteRol } = require('../controllers/roles');
+const { verificarAutenticacion } = require('../middleware/authMiddleware');
 
 router.get('/', getRoles);
-router.post('/', createRol);
-router.put('/:id', updateRol);
-router.delete('/:id', deleteRol);
+router.post('/', verificarAutenticacion, createRol);
+router.put('/:id', verificarAutenticacion, updateRol);
+router.delete('/:id', verificarAutenticacion, deleteRol);
 
 // Obtener usuarios asignados a un rol específico
-router.get('/:id/usuarios', async (req, res) => {
+router.get('/:id/usuarios', verificarAutenticacion, async (req, res) => {
     try {
         const { id } = req.params;
         const [rows] = await db.query(
