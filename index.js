@@ -10,6 +10,7 @@ const escandalloRoutes = require('./src/routes/escandallo');   // <--- Importar
 const clientesRoutes = require('./src/routes/clientes');     // <--- Importar
 const rolesRoutes = require('./src/routes/roles');           // <--- Importar
 const usuariosRoutes = require('./src/routes/usuarios');         // <--- Importar
+const pedidosRoutes = require('./src/routes/pedidos');         // <--- Importar
 
 const app = express();
 app.use(express.json());
@@ -27,6 +28,7 @@ app.use('/api/clientes', require('./src/routes/clientes'));
 app.use('/api/productos', require('./src/routes/productos'));
 app.use('/api/escandallo', require('./src/routes/escandallo'));
 app.use('/api/usuarios', usuariosRoutes);
+app.use('/api/pedidos', pedidosRoutes);
 app.use(express.static('src/views'));
 
 const PORT = process.env.PORT || 3000;

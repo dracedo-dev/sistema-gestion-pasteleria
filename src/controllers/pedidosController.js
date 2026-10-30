@@ -75,4 +75,7 @@ const crearPedido = async (req, res) => {
     }
 };
 
-module.exports = { crearPedido };
+
+module.exports = { 
+    crearPedido
+};

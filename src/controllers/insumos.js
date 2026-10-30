@@ -65,4 +65,20 @@ const deleteInsumo = async (req, res) => {
   }
 };
 
-module.exports = { getInsumos, createInsumo, updateInsumo, deleteInsumo };
+// En tu insumosController.js
+const obtenerToppings = async (req, res) => {
+    try {
+        const query = `
+            SELECT id_insumo, nombre_insumo, stock_actual 
+            FROM insumos 
+            WHERE es_topping = true
+        `;
+        const { rows } = await db.query(query);
+        res.json(rows);
+    } catch (err) {
+        console.error('Error al obtener toppings:', err);
+        res.status(500).json({ error: 'Error en el servidor al obtener toppings' });
+    }
+};
+
+module.exports = { getInsumos, createInsumo, updateInsumo, deleteInsumo, obtenerToppings };
