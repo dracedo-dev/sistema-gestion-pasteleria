@@ -1,8 +1,8 @@
-const db = require('../config/db'); // O la forma en que conectes tu base de datos
+const pool = require('../config/db'); // Importar el pool directamente
 
 const crearPedido = async (req, res) => {
-    // Usamos un cliente de la pool para manejar transacciones (BEGIN / COMMIT / ROLLBACK)
-    const client = await db.pool.connect();
+    // Pedir una conexión cliente al pool
+    const client = await pool.connect();
     
     try {
         await client.query('BEGIN');
@@ -12,15 +12,16 @@ const crearPedido = async (req, res) => {
         // Generar un código único para el pedido (ej: PED-1729...)
         const codigo_unico = 'PED-' + Math.floor(100000 + Math.random() * 900000);
 
-        // 1. Insertar el pedido principal
+        // 1. Insertar el pedido principal respetando el orden y columnas de la BD
         const queryPedido = `
-            INSERT INTO pedidos (codigo_unico, id_cliente, monto_subtotal, monto_descuento, monto_final, canal_notificacion, pago_confirmado)
-            VALUES ($1, $2, $3, $4, $5, $6, false)
+            INSERT INTO pedidos (codigo_unico, id_cliente, estado_pedido, monto_subtotal, monto_descuento, monto_final, canal_notificacion, pago_confirmado)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, false)
             RETURNING id_pedido, codigo_unico;
         `;
         const valoresPedido = [
             codigo_unico, 
             id_cliente, 
+            'Pendiente', // estado_pedido
             monto_subtotal, 
             monto_descuento || 0, 
             monto_final, 
@@ -74,7 +75,6 @@ const crearPedido = async (req, res) => {
         client.release();
     }
 };
-
 
 module.exports = { 
     crearPedido

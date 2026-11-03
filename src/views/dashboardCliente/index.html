@@ -294,7 +294,7 @@
             const montoSubtotal = carrito.reduce((acc, i) => acc + (i.precio * i.cantidad), 0);
 
             const datosPedido = {
-                id_cliente: usuarioGuardado.id_usuario,
+                id_cliente: usuarioGuardado.id_cliente, // 👈 Usar explícitamente el id_cliente de la tabla clientes
                 monto_subtotal: montoSubtotal,
                 monto_descuento: 0.00,
                 monto_final: montoSubtotal,

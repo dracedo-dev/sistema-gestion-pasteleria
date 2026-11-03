@@ -25,14 +25,19 @@ const loginUsuario = async (req, res) => {
             if (!password) {
                 return res.status(400).json({ error: 'Se requiere contraseña para cuentas administrativas' });
             }
-            // Si usas bcrypt:
-            // const passwordValid = await bcrypt.compare(password, usuario.password_hash);
-            // Si guardas la contraseña en texto plano temporalmente para pruebas:
             const passwordValid = (password === usuario.password_hash); 
 
             if (!passwordValid) {
                 return res.status(401).json({ error: 'Contraseña incorrecta' });
             }
+        }
+
+        // 🌟 NUEVO: Buscar el id_cliente correspondiente en la tabla clientes usando el email
+        const clienteRes = await db.query('SELECT id_cliente FROM clientes WHERE email = $1 LIMIT 1', [usuario.email]);
+        if (clienteRes.rows.length > 0) {
+            usuario.id_cliente = clienteRes.rows[0].id_cliente;
+        } else {
+            usuario.id_cliente = null;
         }
 
         // Limpiamos el hash antes de enviarlo al cliente
@@ -49,34 +54,59 @@ const loginUsuario = async (req, res) => {
     }
 };
 
-// Registrar nuevo usuario/cliente desde el login público
+// Registrar nuevo usuario/cliente desde el login público y sincronizarlo en la tabla clientes
 const registrarCliente = async (req, res) => {
+    // Usamos un cliente del pool para manejar la transacción
+    const client = await db.connect();
+
     try {
-        const { nombre_completo, email, password } = req.body;
+        await client.query('BEGIN');
 
-        // Buscar el ID del rol "Cliente"
-        const rolRes = await db.query(`SELECT id_rol FROM roles WHERE LOWER(nombre_rol) LIKE '%cliente%' LIMIT 1`);
-        let idRolCliente = rolRes.rows.length > 0 ? rolRes.rows[0].id_rol : 2; // O el ID correspondiente
+        const { nombre_completo, email, password, dni, telefono } = req.body;
 
-        const insertQuery = `
+        // 1. Buscar el ID del rol "Cliente"
+        const rolRes = await client.query(`SELECT id_rol FROM roles WHERE LOWER(nombre_rol) LIKE '%cliente%' LIMIT 1`);
+        let idRolCliente = rolRes.rows.length > 0 ? rolRes.rows[0].id_rol : 2; // Valor por defecto 2 si no lo encuentra
+
+        // 2. Insertar en la tabla 'usuarios'
+        const insertUsuarioQuery = `
             INSERT INTO usuarios (nombre_completo, email, password_hash, id_rol, activo)
             VALUES ($1, $2, $3, $4, true)
-            RETURNING id_usuario, nombre_completo, email
+            RETURNING id_usuario, nombre_completo, email;
         `;
+        const userRes = await client.query(insertUsuarioQuery, [nombre_completo, email, password, idRolCliente]);
+        const usuarioCreado = userRes.rows[0];
 
-        const { rows } = await db.query(insertQuery, [nombre_completo, email, password, idRolCliente]);
+        // 3. Insertar automáticamente en la tabla 'clientes' para que la FK de pedidos no falle
+        const insertClienteQuery = `
+            INSERT INTO clientes (dni, nombre_completo, telefono, email, pedidos_completados)
+            VALUES ($1, $2, $3, $4, 0)
+            RETURNING id_cliente;
+        `;
+        // Usamos valores por defecto si el formulario del cliente no envía DNI o teléfono todavía
+        const dniCliente = dni || ('S/D-' + Math.floor(1000 + Math.random() * 9000));
+        const telCliente = telefono || 'Sin teléfono';
+        
+        await client.query(insertClienteQuery, [dniCliente, nombre_completo, telCliente, email]);
+
+        await client.query('COMMIT');
 
         res.status(201).json({
-            message: 'Cuenta registrada exitosamente',
-            usuario: rows[0]
+            message: 'Cuenta registrada y vinculada exitosamente',
+            usuario: usuarioCreado
         });
+
     } catch (err) {
-        // Código 23505 = Restricción Única Violada (Email duplicado)
+        await client.query('ROLLBACK');
+        
+        // Código 23505 = Restricción Única Violada (Email o DNI duplicado)
         if (err.code === '23505') {
-            return res.status(400).json({ error: 'El correo electrónico ya se encuentra registrado. Intenta iniciar sesión.' });
+            return res.status(400).json({ error: 'El correo electrónico o DNI ya se encuentra registrado. Intenta iniciar sesión.' });
         }
         console.error("Error al registrar cuenta:", err);
         res.status(500).json({ error: 'Error interno en el servidor' });
+    } finally {
+        client.release();
     }
 };
 
