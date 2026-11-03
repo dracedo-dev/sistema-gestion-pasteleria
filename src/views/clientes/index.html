@@ -99,6 +99,15 @@
     <script>
         const API = 'http://localhost:3000/api';
 
+        // Función auxiliar para incluir la autenticación en cada petición
+        function obtenerHeaders() {
+            const token = localStorage.getItem('token');
+            return {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            };
+        }
+
         // Carga automática del Header común
         fetch('../partials/header.html')
             .then(res => res.text())
@@ -158,7 +167,10 @@
             try {
                 const searchEl = document.getElementById('searchCliente');
                 const q = searchEl ? searchEl.value : '';
-                const res = await fetch(`${API}/clientes?q=${q}`);
+                const res = await fetch(`${API}/clientes?q=${q}`, {
+                    headers: obtenerHeaders(),
+                    credentials: 'include'
+                });
                 listaClientesCache = await res.json();
                 renderizarTablaClientes();
             } catch (err) { console.error(err); }
@@ -223,7 +235,11 @@
 
         async function eliminarCliente(id) {
             if (!confirm('¿Estás seguro de eliminar este cliente?')) return;
-            const res = await fetch(`${API}/clientes/${id}`, { method: 'DELETE' });
+            const res = await fetch(`${API}/clientes/${id}`, { 
+                method: 'DELETE',
+                headers: obtenerHeaders(),
+                credentials: 'include'
+            });
             const data = await res.json();
             if (!res.ok) alert(data.error); else cargarClientes();
         }
@@ -237,7 +253,8 @@
 
             const res = await fetch(url, {
                 method: method,
-                headers: { 'Content-Type': 'application/json' },
+                headers: obtenerHeaders(),
+                credentials: 'include',
                 body: JSON.stringify({
                     dni: document.getElementById('cliDni').value,
                     nombre_completo: document.getElementById('cliNombre').value,

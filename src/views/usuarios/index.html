@@ -90,11 +90,20 @@
         </div>
     </div>
 
-    <!-- Bootstrap JS Bundle -->
+<!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const API = 'http://localhost:3000/api';
         let listaUsuariosCache = [];
+
+        // Función auxiliar para incluir la autenticación en cada petición
+        function obtenerHeaders() {
+            const token = localStorage.getItem('token');
+            return {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            };
+        }
 
         // Cargar Header Compartido
         fetch('../partials/header.html')
@@ -107,11 +116,16 @@
         // Cargar roles en el select del modal
         async function cargarRolesEnSelect(idRolSeleccionado = null) {
             try {
-                const res = await fetch(`${API}/roles`);
+                const res = await fetch(`${API}/roles`, {
+                    headers: obtenerHeaders(),
+                    credentials: 'include'
+                });
                 const roles = await res.json();
                 const select = document.getElementById('usrRol');
-                select.innerHTML = `<option value="">Seleccione un rol...</option>` +
-                    roles.map(r => `<option value="${r.id_rol}" ${r.id_rol === idRolSeleccionado ? 'selected' : ''}>${r.nombre_rol}</option>`).join('');
+                if (select) {
+                    select.innerHTML = `<option value="">Seleccione un rol...</option>` +
+                        roles.map(r => `<option value="${r.id_rol}" ${r.id_rol === idRolSeleccionado ? 'selected' : ''}>${r.nombre_rol}</option>`).join('');
+                }
             } catch (err) { console.error('Error al cargar roles:', err); }
         }
 
@@ -120,6 +134,13 @@
             document.getElementById('formUsuario').reset();
             document.getElementById('usuarioId').value = '';
             document.getElementById('tituloModalUsuario').innerText = 'Registrar Nuevo Usuario';
+            
+            // Ocultar campo de contraseña por defecto al abrir como nuevo
+            const divPassword = document.getElementById('divPasswordAdmin');
+            if (divPassword) divPassword.classList.add('d-none');
+            const passInput = document.getElementById('usrPassword');
+            if (passInput) passInput.required = false;
+
             await cargarRolesEnSelect();
             const modal = new bootstrap.Modal(document.getElementById('modalUsuario'));
             modal.show();
@@ -128,7 +149,10 @@
         // Obtener y listar usuarios
         const cargarUsuarios = async () => {
             try {
-                const res = await fetch(`${API}/usuarios`);
+                const res = await fetch(`${API}/usuarios`, {
+                    headers: obtenerHeaders(),
+                    credentials: 'include'
+                });
                 listaUsuariosCache = await res.json();
                 renderizarTablaUsuarios(listaUsuariosCache);
             } catch (err) { console.error('Error al cargar usuarios:', err); }
@@ -165,7 +189,11 @@
         // Función para cambiar el estado al hacer clic en el botón de la tabla
         async function toggleEstadoUsuario(id) {
             try {
-                const res = await fetch(`${API}/usuarios/${id}/estado`, { method: 'PATCH' });
+                const res = await fetch(`${API}/usuarios/${id}/estado`, { 
+                    method: 'PATCH',
+                    headers: obtenerHeaders(),
+                    credentials: 'include'
+                });
                 if (res.ok) {
                     cargarUsuarios();
                 } else {
@@ -181,6 +209,16 @@
             document.getElementById('usrNombre').value = nombre;
             document.getElementById('usrEmail').value = email;
             document.getElementById('tituloModalUsuario').innerText = 'Editar Usuario';
+            
+            // Al editar, opcionalmente ocultamos o no requerimos contraseña a menos que se quiera cambiar
+            const divPassword = document.getElementById('divPasswordAdmin');
+            if (divPassword) divPassword.classList.add('d-none');
+            const passInput = document.getElementById('usrPassword');
+            if (passInput) {
+                passInput.required = false;
+                passInput.value = '';
+            }
+
             await cargarRolesEnSelect(idRol);
             const modal = new bootstrap.Modal(document.getElementById('modalUsuario'));
             modal.show();
@@ -190,7 +228,11 @@
         async function eliminarUsuario(id) {
             if (!confirm('¿Estás seguro de dar de baja a este usuario?')) return;
             try {
-                const res = await fetch(`${API}/usuarios/${id}`, { method: 'DELETE' });
+                const res = await fetch(`${API}/usuarios/${id}`, { 
+                    method: 'DELETE',
+                    headers: obtenerHeaders(),
+                    credentials: 'include'
+                });
                 if (res.ok) {
                     cargarUsuarios();
                 } else {
@@ -199,35 +241,6 @@
                 }
             } catch (err) { console.error('Error al eliminar:', err); }
         }
-
-        // Guardar (Crear o Actualizar)
-        document.getElementById('formUsuario').onsubmit = async (e) => {
-            e.preventDefault();
-            const id = document.getElementById('usuarioId').value;
-            const method = id ? 'PUT' : 'POST';
-            const url = id ? `${API}/usuarios/${id}` : `${API}/usuarios`;
-
-            try {
-                const res = await fetch(url, {
-                    method,
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        nombre_completo: document.getElementById('usrNombre').value,
-                        email: document.getElementById('usrEmail').value,
-                        id_rol: parseInt(document.getElementById('usrRol').value)
-                    })
-                });
-
-                const data = await res.json();
-                if (!res.ok) {
-                    alert(data.error || 'Error al guardar');
-                    return;
-                }
-
-                bootstrap.Modal.getInstance(document.getElementById('modalUsuario')).hide();
-                cargarUsuarios();
-            } catch (err) { console.error('Error al enviar formulario:', err); }
-        };
 
         // Buscador en tiempo real
         const searchInput = document.getElementById('searchUsuario');
@@ -242,53 +255,65 @@
             });
         }
 
-        document.getElementById('usrRol').addEventListener('change', function() {
-            const selectRol = this;
-            const textoRolSeleccionado = selectRol.options[selectRol.selectedIndex].text.toLowerCase();
-            const divPassword = document.getElementById('divPasswordAdmin');
+        // Lógica condicional para mostrar contraseña según el rol seleccionado
+        const selectRol = document.getElementById('usrRol');
+        if (selectRol) {
+            selectRol.addEventListener('change', function() {
+                const textoRolSeleccionado = this.options[this.selectedIndex].text.toLowerCase();
+                const divPassword = document.getElementById('divPasswordAdmin');
+                const passInput = document.getElementById('usrPassword');
 
-            // Si el rol seleccionado NO es cliente (ej: Administrador, empleado, etc.), mostramos el campo de contraseña
-            if (textoRolSeleccionado.includes('administrador') || !textoRolSeleccionado.includes('cliente')) {
-                divPassword.classList.remove('d-none');
-                document.getElementById('usrPassword').required = true;
-            } else {
-                divPassword.classList.add('d-none');
-                document.getElementById('usrPassword').required = false;
-                document.getElementById('usrPassword').value = '';
-            }
-        });
-
-        document.getElementById('formUsuario').onsubmit = async (e) => {
-            e.preventDefault();
-            const id = document.getElementById('usuarioId').value;
-            const method = id ? 'PUT' : 'POST';
-            const url = id ? `${API}/usuarios/${id}` : `${API}/usuarios`;
-
-            // Recolectamos los datos del formulario
-            const datosUsuario = {
-                nombre_completo: document.getElementById('usrNombre').value,
-                email: document.getElementById('usrEmail').value,
-                id_rol: parseInt(document.getElementById('usrRol').value),
-                password: document.getElementById('usrPassword').value // Enviamos la contraseña si fue escrita
-            };
-
-            try {
-                const res = await fetch(url, {
-                    method,
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(datosUsuario)
-                });
-
-                const data = await res.json();
-                if (!res.ok) {
-                    alert(data.error || 'Error al guardar');
-                    return;
+                if (divPassword && passInput) {
+                    if (textoRolSeleccionado.includes('administrador') || !textoRolSeleccionado.includes('cliente')) {
+                        divPassword.classList.remove('d-none');
+                        passInput.required = true;
+                    } else {
+                        divPassword.classList.add('d-none');
+                        passInput.required = false;
+                        passInput.value = '';
+                    }
                 }
+            });
+        }
 
-                bootstrap.Modal.getInstance(document.getElementById('modalUsuario')).hide();
-                cargarUsuarios();
-            } catch (err) { console.error('Error al enviar formulario:', err); }
-        };
+        // Guardar (Crear o Actualizar) unificado
+        const formUsuario = document.getElementById('formUsuario');
+        if (formUsuario) {
+            formUsuario.onsubmit = async (e) => {
+                e.preventDefault();
+                const id = document.getElementById('usuarioId').value;
+                const method = id ? 'PUT' : 'POST';
+                const url = id ? `${API}/usuarios/${id}` : `${API}/usuarios`;
+
+                const datosUsuario = {
+                    nombre_completo: document.getElementById('usrNombre').value,
+                    email: document.getElementById('usrEmail').value,
+                    id_rol: parseInt(document.getElementById('usrRol').value),
+                    password: document.getElementById('usrPassword').value
+                };
+
+                try {
+                    const res = await fetch(url, {
+                        method,
+                        headers: obtenerHeaders(),
+                        credentials: 'include',
+                        body: JSON.stringify(datosUsuario)
+                    });
+
+                    const data = await res.json();
+                    if (!res.ok) {
+                        alert(data.error || 'Error al guardar');
+                        return;
+                    }
+
+                    const modalEl = document.getElementById('modalUsuario');
+                    const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                    if (modalInstance) modalInstance.hide();
+                    
+                    cargarUsuarios();
+                } catch (err) { console.error('Error al enviar formulario:', err); }
+            };
+        }
 
         // Inicializar carga al abrir la vista
         cargarUsuarios();

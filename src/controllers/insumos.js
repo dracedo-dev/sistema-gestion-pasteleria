@@ -22,14 +22,19 @@ const getInsumos = async (req, res) => {
 
 const createInsumo = async (req, res) => {
   try {
-    const { nombre_insumo, unidad_medida, stock_actual, stock_minimo, costo_unitario } = req.body;
+    const { nombre_insumo, unidad_medida, stock_actual, stock_minimo, costo_unitario, es_topping } = req.body;
 
     const query = `
-      INSERT INTO insumos (nombre_insumo, unidad_medida, stock_actual, stock_minimo, costo_unitario) 
-      VALUES ($1, $2, $3, $4, $5) RETURNING *;
+      INSERT INTO insumos (nombre_insumo, unidad_medida, stock_actual, stock_minimo, costo_unitario, es_topping)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *;
     `;
-    const { rows } = await db.query(query, [nombre_insumo, unidad_medida, stock_actual, stock_minimo, costo_unitario]);
-    res.status(201).json(rows[0]);
+    const values = [nombre_insumo, unidad_medida, stock_actual, stock_minimo, costo_unitario, es_topping || false];
+    
+    const result = await db.query(query, values);
+    
+    // Asegúrate de usar 'result.rows[0]' y no solo 'rows[0]' si no hiciste la desestructuración
+    res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error("Error al crear insumo:", error);
     res.status(500).json({ error: 'Error al crear el insumo' });
@@ -39,15 +44,27 @@ const createInsumo = async (req, res) => {
 const updateInsumo = async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre_insumo, unidad_medida, stock_actual, stock_minimo, costo_unitario } = req.body;
+    const { nombre_insumo, unidad_medida, stock_actual, stock_minimo, costo_unitario, es_topping } = req.body;
 
     const query = `
       UPDATE insumos 
-      SET nombre_insumo = $1, unidad_medida = $2, stock_actual = $3, stock_minimo = $4, costo_unitario = $5 
-      WHERE id_insumo = $6 RETURNING *;
+      SET nombre_insumo = $1, unidad_medida = $2, stock_actual = $3, stock_minimo = $4, costo_unitario = $5, es_topping = $6 
+      WHERE id_insumo = $7 
+      RETURNING *;
     `;
-    const { rows } = await db.query(query, [nombre_insumo, unidad_medida, stock_actual, stock_minimo, costo_unitario, id]);
-    res.json(rows[0]);
+    
+    const values = [
+      nombre_insumo, 
+      unidad_medida, 
+      stock_actual, 
+      stock_minimo, 
+      costo_unitario, 
+      es_topping || false, 
+      id
+    ];
+
+    const result = await db.query(query, values);
+    res.json(result.rows[0]);
   } catch (error) {
     console.error("Error al actualizar insumo:", error);
     res.status(500).json({ error: 'Error al actualizar el insumo' });

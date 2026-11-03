@@ -122,10 +122,19 @@
         </div>
     </div>
 
-    <!-- Bootstrap JS Bundle -->
+<!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const API = 'http://localhost:3000/api';
+
+        // Función auxiliar para incluir la autenticación en cada petición
+        function obtenerHeaders() {
+            const token = localStorage.getItem('token');
+            return {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            };
+        }
 
         // Carga automática del Header común
         fetch('../partials/header.html')
@@ -177,7 +186,10 @@
 
         async function cargarCategoriasActivasEnSelect() {
             try {
-                const res = await fetch(`${API}/categorias?estado=true`);
+                const res = await fetch(`${API}/categorias?estado=true`, {
+                    headers: obtenerHeaders(),
+                    credentials: 'include'
+                });
                 const categorias = await res.json();
                 const select = document.getElementById('prodCategoria');
                 if (!select) return;
@@ -198,7 +210,10 @@
             try {
                 const searchEl = document.getElementById('searchProductoAdmin');
                 const q = searchEl ? searchEl.value : '';
-                const res = await fetch(`${API}/productos?q=${q}`);
+                const res = await fetch(`${API}/productos?q=${q}`, {
+                    headers: obtenerHeaders(),
+                    credentials: 'include'
+                });
                 listaProductosCache = await res.json();
                 renderizarTablaProductos();
             } catch (err) { console.error(err); }
@@ -266,7 +281,10 @@
             try {
                 const tituloEl = document.getElementById('tituloDetalleProducto');
                 if (tituloEl) tituloEl.innerText = `Historial de Pedidos: ${nombre}`;
-                const res = await fetch(`${API}/productos/${id}/pedidos`);
+                const res = await fetch(`${API}/productos/${id}/pedidos`, {
+                    headers: obtenerHeaders(),
+                    credentials: 'include'
+                });
                 const pedidos = await res.json();
                 
                 const tbody = document.getElementById('tablaDetallePedidosProducto');
@@ -291,7 +309,11 @@
 
         async function eliminarProducto(id) {
             if (!confirm('¿Estás seguro de eliminar este producto?')) return;
-            const res = await fetch(`${API}/productos/${id}`, { method: 'DELETE' });
+            const res = await fetch(`${API}/productos/${id}`, { 
+                method: 'DELETE',
+                headers: obtenerHeaders(),
+                credentials: 'include'
+            });
             const data = await res.json();
             if (!res.ok) alert(data.error); else cargarProductosAdmin();
         }
@@ -305,7 +327,8 @@
 
             const res = await fetch(url, {
                 method: method,
-                headers: { 'Content-Type': 'application/json' },
+                headers: obtenerHeaders(),
+                credentials: 'include',
                 body: JSON.stringify({
                     nombre_producto: document.getElementById('prodNombre').value,
                     id_categoria: parseInt(document.getElementById('prodCategoria').value),

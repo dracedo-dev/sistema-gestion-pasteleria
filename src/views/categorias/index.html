@@ -119,6 +119,15 @@
     <script>
         const API = 'http://localhost:3000/api';
 
+        // Función auxiliar para obtener los headers con autenticación (ajusta según cómo guardes tu token/sesión)
+        function obtenerHeaders() {
+            const token = localStorage.getItem('token'); // O la clave con la que guardes tu token o sesión
+            return {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            };
+        }
+
         // Carga automática del Header común
         fetch('../partials/header.html')
             .then(res => res.text())
@@ -181,7 +190,10 @@
                 const q = searchEl ? searchEl.value : '';
                 const estado = filterEl ? filterEl.value : '';
                 
-                const res = await fetch(`${API}/categorias?q=${q}&estado=${estado}`);
+                const res = await fetch(`${API}/categorias?q=${q}&estado=${estado}`, {
+                    headers: obtenerHeaders(),
+                    credentials: 'include' // Por si usas cookies de sesión
+                });
                 listaCategoriasCache = await res.json();
                 renderizarTablaCategorias();
             } catch (err) { console.error(err); }
@@ -229,7 +241,8 @@
 
                 const res = await fetch(`${API}/categorias/${id}`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: obtenerHeaders(),
+                    credentials: 'include',
                     body: JSON.stringify({ nombre_categoria: nombre, activo: !estadoActual })
                 });
 
@@ -266,7 +279,10 @@
             try {
                 const tituloEl = document.getElementById('tituloDetalleCategoria');
                 if (tituloEl) tituloEl.innerText = `Productos en la Categoría: ${nombre}`;
-                const res = await fetch(`${API}/categorias/${id}/productos`);
+                const res = await fetch(`${API}/categorias/${id}/productos`, {
+                    headers: obtenerHeaders(),
+                    credentials: 'include'
+                });
                 const productos = await res.json();
                 
                 const tbody = document.getElementById('tablaDetalleProductos');
@@ -290,7 +306,11 @@
 
         async function eliminarCategoria(id) {
             if (!confirm('¿Estás seguro de eliminar esta categoría?')) return;
-            const res = await fetch(`${API}/categorias/${id}`, { method: 'DELETE' });
+            const res = await fetch(`${API}/categorias/${id}`, { 
+                method: 'DELETE',
+                headers: obtenerHeaders(),
+                credentials: 'include'
+            });
             const data = await res.json();
             if (!res.ok) alert(data.error); else cargarCategorias();
         }
@@ -305,7 +325,8 @@
 
             const res = await fetch(url, {
                 method: method,
-                headers: { 'Content-Type': 'application/json' },
+                headers: obtenerHeaders(),
+                credentials: 'include',
                 body: JSON.stringify({ nombre_categoria: document.getElementById('catNombre').value })
             });
             const data = await res.json();

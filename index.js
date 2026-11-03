@@ -14,7 +14,10 @@ const pedidosRoutes = require('./src/routes/pedidos');         // <--- Importar
 
 const app = express();
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+    origin: 'http://localhost:3000', // o el puerto de tu frontend
+    credentials: true
+}));
 
 // Middleware para leer JSON y servir archivos estáticos de la carpeta views
 app.use(express.json());

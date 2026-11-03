@@ -103,10 +103,19 @@
         </div>
     </div>
 
-    <!-- Bootstrap JS Bundle -->
+<!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const API = 'http://localhost:3000/api';
+
+        // Función auxiliar para incluir la autenticación en cada petición
+        function obtenerHeaders() {
+            const token = localStorage.getItem('token');
+            return {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            };
+        }
 
         // Carga automática del Header común
         fetch('../partials/header.html')
@@ -147,7 +156,10 @@
             try {
                 const searchEl = document.getElementById('searchReceta');
                 const q = searchEl ? searchEl.value : '';
-                const res = await fetch(`${API}/productos?q=${q}`);
+                const res = await fetch(`${API}/productos?q=${q}`, {
+                    headers: obtenerHeaders(),
+                    credentials: 'include'
+                });
                 listaProductosRecetasCache = await res.json();
                 renderizarTablaRecetasProductos();
             } catch (err) { console.error(err); }
@@ -216,7 +228,10 @@
 
         async function cargarSelectInsumosModal() {
             try {
-                const res = await fetch(`${API}/insumos`);
+                const res = await fetch(`${API}/insumos`, {
+                    headers: obtenerHeaders(),
+                    credentials: 'include'
+                });
                 const insumos = await res.json();
                 const select = document.getElementById('selectInsumoReceta');
                 if (select) {
@@ -228,7 +243,10 @@
 
         async function cargarInsumosDeRecetaActual(idProducto) {
             try {
-                const res = await fetch(`${API}/escandallo`);
+                const res = await fetch(`${API}/escandallo`, {
+                    headers: obtenerHeaders(),
+                    credentials: 'include'
+                });
                 const escandallo = await res.json();
                 const insumosReceta = escandallo.filter(e => e.id_producto === idProducto);
 
@@ -260,7 +278,8 @@
                 try {
                     const res = await fetch(`${API}/escandallo`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: obtenerHeaders(),
+                        credentials: 'include',
                         body: JSON.stringify({
                             id_producto: productoActualId,
                             id_insumo: parseInt(document.getElementById('selectInsumoReceta').value),
@@ -281,7 +300,11 @@
         async function eliminarInsumoDeReceta(idEscandallo) {
             if (!confirm('¿Estás seguro de quitar este insumo de la receta?')) return;
             try {
-                const res = await fetch(`${API}/escandallo/${idEscandallo}`, { method: 'DELETE' });
+                const res = await fetch(`${API}/escandallo/${idEscandallo}`, { 
+                    method: 'DELETE',
+                    headers: obtenerHeaders(),
+                    credentials: 'include'
+                });
                 if (res.ok) {
                     await cargarInsumosDeRecetaActual(productoActualId);
                 }

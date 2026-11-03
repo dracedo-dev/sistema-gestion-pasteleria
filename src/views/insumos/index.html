@@ -46,6 +46,7 @@
                         <th>Stock Actual</th>
                         <th>Stock Mínimo</th>
                         <th>Costo Unitario</th>
+                        <th>Es Topping</th>
                         <th class="text-center">Acciones</th>
                     </tr>
                 </thead>
@@ -89,6 +90,10 @@
                             <input type="number" step="0.01" id="insCosto" class="form-control" required>
                         </div>
                     </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="es_topping" name="es_topping">
+                        <label class="form-check-label" for="es_topping">¿Es un Topping visible para el cliente?</label>
+                    </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                         <button type="submit" class="btn btn-success">Guardar</button>
@@ -98,10 +103,19 @@
         </div>
     </div>
 
-    <!-- Bootstrap JS Bundle -->
+<!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const API = 'http://localhost:3000/api';
+
+        // Función auxiliar para incluir la autenticación en cada petición
+        function obtenerHeaders() {
+            const token = localStorage.getItem('token');
+            return {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            };
+        }
 
         // Carga automática del Header común
         fetch('../partials/header.html')
@@ -154,6 +168,7 @@
         function abrirModalInsumo() {
             document.getElementById('formInsumo').reset();
             document.getElementById('insumoId').value = '';
+            document.getElementById('es_topping').checked = false;
             document.getElementById('tituloModalInsumo').innerText = 'Registrar Nuevo Insumo';
             abrirModal('modalInsumo');
         }
@@ -162,7 +177,10 @@
             try {
                 const searchEl = document.getElementById('searchInsumo');
                 const q = searchEl ? searchEl.value : '';
-                const res = await fetch(`${API}/insumos?q=${q}`);
+                const res = await fetch(`${API}/insumos?q=${q}`, {
+                    headers: obtenerHeaders(),
+                    credentials: 'include'
+                });
                 listaInsumosCache = await res.json();
                 renderizarTablaInsumos();
             } catch (err) { console.error(err); }
@@ -191,8 +209,11 @@
                     <td>${i.stock_actual}</td>
                     <td>${i.stock_minimo}</td>
                     <td>$${parseFloat(i.costo_unitario).toFixed(2)}</td>
+                    <td>
+                        ${i.es_topping ? '<span class="badge bg-success">Topping</span>' : '<span class="badge bg-secondary">Insumo</span>'}
+                    </td>
                     <td class="text-center">
-                        <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarInsumo(${i.id_insumo}, '${i.nombre_insumo}', '${i.unidad_medida}', ${i.stock_actual}, ${i.stock_minimo}, ${i.costo_unitario})">✏️</button>
+                        <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarInsumo(${i.id_insumo}, '${i.nombre_insumo}', '${i.unidad_medida}', ${i.stock_actual}, ${i.stock_minimo}, ${i.costo_unitario}, ${i.es_topping})">✏️</button>
                         <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarInsumo(${i.id_insumo})">🗑️</button>
                     </td>
                 </tr>
@@ -215,20 +236,25 @@
 
         const cambiarPaginaIns = (p) => { paginaActualIns = p; renderizarTablaInsumos(); };
 
-        function prepararEditarInsumo(id, nombre, unidad, stockAct, stockMin, costo) {
+        function prepararEditarInsumo(id, nombre, unidad, stockAct, stockMin, costo, esTopping) {
             document.getElementById('insumoId').value = id;
             document.getElementById('insNombre').value = nombre;
             document.getElementById('insUnidad').value = unidad;
             document.getElementById('insStockActual').value = stockAct;
             document.getElementById('insStockMinimo').value = stockMin;
             document.getElementById('insCosto').value = costo;
+            document.getElementById('es_topping').checked = Boolean(esTopping);
             document.getElementById('tituloModalInsumo').innerText = 'Editar Insumo';
             abrirModal('modalInsumo');
         }
 
         async function eliminarInsumo(id) {
             if (!confirm('¿Estás seguro de eliminar este insumo?')) return;
-            const res = await fetch(`${API}/insumos/${id}`, { method: 'DELETE' });
+            const res = await fetch(`${API}/insumos/${id}`, { 
+                method: 'DELETE',
+                headers: obtenerHeaders(),
+                credentials: 'include'
+            });
             const data = await res.json();
             if (!res.ok) alert(data.error); else cargarInsumos();
         }
@@ -242,13 +268,15 @@
 
             const res = await fetch(url, {
                 method: method,
-                headers: { 'Content-Type': 'application/json' },
+                headers: obtenerHeaders(),
+                credentials: 'include',
                 body: JSON.stringify({
                     nombre_insumo: document.getElementById('insNombre').value,
                     unidad_medida: document.getElementById('insUnidad').value,
                     stock_actual: parseFloat(document.getElementById('insStockActual').value),
                     stock_minimo: parseFloat(document.getElementById('insStockMinimo').value),
-                    costo_unitario: parseFloat(document.getElementById('insCosto').value)
+                    costo_unitario: parseFloat(document.getElementById('insCosto').value),
+                    es_topping: document.getElementById('es_topping').checked
                 })
             });
             const data = await res.json();
