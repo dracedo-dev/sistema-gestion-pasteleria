@@ -34,20 +34,25 @@
         <form id="formRegistro" class="d-none">
             <div class="mb-3">
                 <label class="form-label">Nombre Completo</label>
-                <input type="text" id="regNombre" class="form-control" required placeholder="Tu Nombre">
+                <input type="text" id="regNombre" class="form-control" required>
             </div>
             <div class="mb-3">
-                <label class="form-label">Correo Electrónico</label>
-                <input type="email" id="regEmail" class="form-control" required placeholder="correo@ejemplo.com">
+                <label class="form-label">DNI</label>
+                <input type="text" id="regDni" class="form-control" required placeholder="Ej: 40123456">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Teléfono</label>
+                <input type="text" id="regTelefono" class="form-control" required placeholder="Ej: 2964123456">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Correo electrónico</label>
+                <input type="email" id="regEmail" class="form-control" required>
             </div>
             <div class="mb-3">
                 <label class="form-label">Contraseña</label>
-                <input type="password" id="regPassword" class="form-control" required placeholder="••••••••">
+                <input type="password" id="regPassword" class="form-control" required>
             </div>
-            <button type="submit" class="btn btn-primary w-100 mb-2">Crear Cuenta</button>
-            <div class="text-center">
-                <button type="button" class="btn btn-link btn-sm text-decoration-none" onclick="alternarVista('login')">¿Ya tienes cuenta? Inicia sesión</button>
-            </div>
+            <button type="submit" class="btn btn-primary w-100">Registrarse</button>
         </form>
     </div>
 
@@ -62,11 +67,11 @@
             if (vista === 'registro') {
                 fLogin.classList.add('d-none');
                 fRegistro.classList.remove('d-none');
-                subitulo.innerText = 'Crea tu cuenta de cliente';
+                subtitulo.innerText = 'Crea tu cuenta de cliente';
             } else {
                 fRegistro.classList.add('d-none');
                 fLogin.classList.remove('d-none');
-                subitulo.innerText = 'Inicia sesión en tu cuenta';
+                subtitulo.innerText = 'Inicia sesión en tu cuenta';
             }
         }
 
@@ -97,32 +102,38 @@
             }
         };
 
-        // Procesar Registro de Cliente
-        document.getElementById('formRegistro').onsubmit = async (e) => {
+        // Procesar Registro de Cliente (ID corregido a 'formRegistro')
+        document.getElementById('formRegistro').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const nombre_completo = document.getElementById('regNombre').value;
-            const email = document.getElementById('regEmail').value;
-            const password = document.getElementById('regPassword').value;
+
+            const datos = {
+                nombre_completo: document.getElementById('regNombre').value,
+                dni: document.getElementById('regDni').value,
+                telefono: document.getElementById('regTelefono').value,
+                email: document.getElementById('regEmail').value,
+                password: document.getElementById('regPassword').value
+            };
 
             try {
                 const res = await fetch(`${API}/usuarios/registro`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ nombre_completo, email, password })
+                    body: JSON.stringify(datos)
                 });
 
-                const data = await res.json();
-                if (!res.ok) {
-                    alert(data.error || 'Error al registrarse');
-                    return;
-                }
+                const errorData = await res.json();
 
-                alert('¡Cuenta creada con éxito! Ahora puedes iniciar sesión.');
-                alternarVista('login');
+                if (res.ok) {
+                    alert('¡Registro exitoso! Ya puedes iniciar sesión.');
+                    window.location.href = '/login.html';
+                } else {
+                    alert(errorData.error || 'Error al registrarse');
+                }
             } catch (err) {
-                console.error('Error de red:', err);
+                console.error('Error de red al registrar:', err);
+                alert('Error de conexión con el servidor.');
             }
-        };
+        });
     </script>
 </body>
 </html>

@@ -32,7 +32,7 @@ const loginUsuario = async (req, res) => {
             }
         }
 
-        // 🌟 NUEVO: Buscar el id_cliente correspondiente en la tabla clientes usando el email
+        // Buscar el id_cliente correspondiente en la tabla clientes usando el email
         const clienteRes = await db.query('SELECT id_cliente FROM clientes WHERE email = $1 LIMIT 1', [usuario.email]);
         if (clienteRes.rows.length > 0) {
             usuario.id_cliente = clienteRes.rows[0].id_cliente;
@@ -56,7 +56,6 @@ const loginUsuario = async (req, res) => {
 
 // Registrar nuevo usuario/cliente desde el login público y sincronizarlo en la tabla clientes
 const registrarCliente = async (req, res) => {
-    // Usamos un cliente del pool para manejar la transacción
     const client = await db.connect();
 
     try {
@@ -66,7 +65,7 @@ const registrarCliente = async (req, res) => {
 
         // 1. Buscar el ID del rol "Cliente"
         const rolRes = await client.query(`SELECT id_rol FROM roles WHERE LOWER(nombre_rol) LIKE '%cliente%' LIMIT 1`);
-        let idRolCliente = rolRes.rows.length > 0 ? rolRes.rows[0].id_rol : 2; // Valor por defecto 2 si no lo encuentra
+        let idRolCliente = rolRes.rows.length > 0 ? rolRes.rows[0].id_rol : 2;
 
         // 2. Insertar en la tabla 'usuarios'
         const insertUsuarioQuery = `
@@ -77,17 +76,23 @@ const registrarCliente = async (req, res) => {
         const userRes = await client.query(insertUsuarioQuery, [nombre_completo, email, password, idRolCliente]);
         const usuarioCreado = userRes.rows[0];
 
-        // 3. Insertar automáticamente en la tabla 'clientes' para que la FK de pedidos no falle
-        const insertClienteQuery = `
-            INSERT INTO clientes (dni, nombre_completo, telefono, email, pedidos_completados)
-            VALUES ($1, $2, $3, $4, 0)
-            RETURNING id_cliente;
-        `;
-        // Usamos valores por defecto si el formulario del cliente no envía DNI o teléfono todavía
+        // 3. Preparar datos del cliente
         const dniCliente = dni || ('S/D-' + Math.floor(1000 + Math.random() * 9000));
         const telCliente = telefono || 'Sin teléfono';
-        
-        await client.query(insertClienteQuery, [dniCliente, nombre_completo, telCliente, email]);
+
+        // 4. Verificar si ya existe en la tabla clientes por DNI o Email antes de insertar
+        const clienteExiste = await client.query(
+            'SELECT id_cliente FROM clientes WHERE dni = $1 OR email = $2',
+            [dniCliente, email]
+        );
+
+        if (clienteExiste.rows.length === 0) {
+            const insertClienteQuery = `
+                INSERT INTO clientes (dni, nombre_completo, telefono, email, pedidos_completados)
+                VALUES ($1, $2, $3, $4, 0);
+            `;
+            await client.query(insertClienteQuery, [dniCliente, nombre_completo, telCliente, email]);
+        }
 
         await client.query('COMMIT');
 
@@ -99,12 +104,65 @@ const registrarCliente = async (req, res) => {
     } catch (err) {
         await client.query('ROLLBACK');
         
-        // Código 23505 = Restricción Única Violada (Email o DNI duplicado)
         if (err.code === '23505') {
             return res.status(400).json({ error: 'El correo electrónico o DNI ya se encuentra registrado. Intenta iniciar sesión.' });
         }
         console.error("Error al registrar cuenta:", err);
         res.status(500).json({ error: 'Error interno en el servidor' });
+    } finally {
+        client.release();
+    }
+};
+
+// Crear un nuevo usuario desde el panel de administración (Sincronizado con Clientes si aplica)
+const crearUsuario = async (req, res) => {
+    const client = await db.connect();
+    try {
+        await client.query('BEGIN');
+
+        const { nombre_completo, email, id_rol, password, dni, telefono } = req.body;
+        const passwordFinal = password || '123456';
+
+        // 1. Insertar en la tabla 'usuarios'
+        const query = `
+            INSERT INTO usuarios (nombre_completo, email, id_rol, password_hash, activo)
+            VALUES ($1, $2, $3, $4, true)
+            RETURNING id_usuario, nombre_completo, email, id_rol
+        `;
+        const { rows } = await client.query(query, [nombre_completo, email, id_rol, passwordFinal]);
+        const usuarioCreado = rows[0];
+
+        // 2. Verificar si el rol seleccionado es de tipo "Cliente" para sincronizarlo
+        const rolRes = await client.query('SELECT nombre_rol FROM roles WHERE id_rol = $1', [id_rol]);
+        const esCliente = rolRes.rows.length > 0 && rolRes.rows[0].nombre_rol.toLowerCase().includes('cliente');
+
+        if (esCliente) {
+            const dniCliente = dni || ('S/D-' + Math.floor(1000 + Math.random() * 9000));
+            const telCliente = telefono || 'Sin teléfono';
+
+            const clienteExiste = await client.query(
+                'SELECT id_cliente FROM clientes WHERE dni = $1 OR email = $2',
+                [dniCliente, email]
+            );
+
+            if (clienteExiste.rows.length === 0) {
+                const insertClienteQuery = `
+                    INSERT INTO clientes (dni, nombre_completo, telefono, email, pedidos_completados)
+                    VALUES ($1, $2, $3, $4, 0);
+                `;
+                await client.query(insertClienteQuery, [dniCliente, nombre_completo, telCliente, email]);
+            }
+        }
+
+        await client.query('COMMIT');
+        res.status(201).json({ message: 'Usuario creado y sincronizado exitosamente', usuario: usuarioCreado });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        if (err.code === '23505') {
+            return res.status(400).json({ error: 'El correo electrónico o DNI ya está registrado.' });
+        }
+        console.error("Error al crear usuario:", err);
+        res.status(500).json({ error: 'Error en el servidor al crear usuario' });
     } finally {
         client.release();
     }
@@ -127,30 +185,6 @@ const obtenerUsuarios = async (req, res) => {
     }
 };
 
-// Crear un nuevo usuario
-const crearUsuario = async (req, res) => {
-    try {
-        const { nombre_completo, email, id_rol, password } = req.body;
-
-        // Si no mandan contraseña, podemos asignar una por defecto o temporal
-        const passwordFinal = password || '123456';
-
-        const query = `
-            INSERT INTO usuarios (nombre_completo, email, id_rol, password_hash, activo)
-            VALUES ($1, $2, $3, $4, true)
-            RETURNING id_usuario, nombre_completo, email
-        `;
-        
-        const { rows } = await db.query(query, [nombre_completo, email, id_rol, passwordFinal]);
-        res.status(201).json({ message: 'Usuario creado exitosamente', usuario: rows[0] });
-    } catch (err) {
-        if (err.code === '23505') {
-            return res.status(400).json({ error: 'El correo electrónico ya está registrado.' });
-        }
-        console.error("Error al crear usuario:", err);
-        res.status(500).json({ error: 'Error en el servidor al crear usuario' });
-    }
-};
 
 // Actualizar un usuario
 const actualizarUsuario = async (req, res) => {
@@ -188,7 +222,6 @@ const eliminarUsuario = async (req, res) => {
 const cambiarEstadoUsuario = async (req, res) => {
     try {
         const { id } = req.params;
-        // Consultamos el estado actual para invertirlo
         const userQuery = 'SELECT activo FROM usuarios WHERE id_usuario = $1';
         const { rows } = await db.query(userQuery, [id]);
         

@@ -67,27 +67,29 @@
                 </div>
                 <form id="formCliente">
                     <div class="modal-body">
+                        <!-- Campo oculto para el ID en caso de edición -->
                         <input type="hidden" id="clienteId">
+
                         <div class="mb-3">
-                            <label class="form-label">DNI *</label>
-                            <input type="text" id="cliDni" class="form-control" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Nombre Completo *</label>
+                            <label class="form-label">Nombre Completo</label>
                             <input type="text" id="cliNombre" class="form-control" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Teléfono *</label>
-                            <input type="text" id="cliTelefono" class="form-control" required>
+                            <label class="form-label">DNI</label>
+                            <input type="text" id="cliDni" class="form-control" required placeholder="Ej: 40123456">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Email</label>
-                            <input type="email" id="cliEmail" class="form-control">
+                            <label class="form-label">Teléfono</label>
+                            <input type="text" id="cliTelefono" class="form-control" required placeholder="Ej: 2964123456">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Correo electrónico</label>
+                            <input type="email" id="cliEmail" class="form-control" required>
                         </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-success">Guardar</button>
+                        <button type="submit" class="btn btn-success">Guardar Cliente</button>
                     </div>
                 </form>
             </div>
@@ -194,13 +196,13 @@
             tbody.innerHTML = datosPagina.map(c => `
                 <tr>
                     <td>${c.id_cliente}</td>
-                    <td>${c.dni}</td>
+                    <td>${c.dni || '-'}</td>
                     <td class="fw-bold">${c.nombre_completo}</td>
-                    <td>${c.telefono}</td>
+                    <td>${c.telefono || '-'}</td>
                     <td>${c.email || '-'}</td>
-                    <td><span class="badge bg-info text-dark">${c.pedidos_completados}</span></td>
+                    <td><span class="badge bg-info text-dark">${c.pedidos_completados || 0}</span></td>
                     <td class="text-center">
-                        <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarCliente(${c.id_cliente}, '${c.dni}', '${c.nombre_completo}', '${c.telefono}', '${c.email || ''}')">✏️</button>
+                        <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarCliente(${c.id_cliente}, '${c.dni || ''}', '${c.nombre_completo}', '${c.telefono || ''}', '${c.email || ''}')">✏️</button>
                         <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarCliente(${c.id_cliente})">🗑️</button>
                     </td>
                 </tr>

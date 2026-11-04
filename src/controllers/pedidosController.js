@@ -121,6 +121,64 @@ const actualizarEstadoPedido = async (req, res) => {
     }
 };
 
+// Obtener el detalle completo de un pedido (productos, cantidades y opciones/toppings)
+const obtenerDetallePedidoAdmin = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // 1. Obtener información general del pedido, cliente (incluyendo DNI y teléfono)
+        const pedidoQuery = `
+            SELECT p.*, 
+                   c.nombre_completo AS cliente_nombre, 
+                   c.telefono AS cliente_telefono, 
+                   c.email AS cliente_email,
+                   c.dni AS cliente_dni
+            FROM pedidos p
+            JOIN clientes c ON p.id_cliente = c.id_cliente
+            WHERE p.id_pedido = $1;
+        `;
+        const pedidoRes = await db.query(pedidoQuery, [id]);
+
+        if (pedidoRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Pedido no encontrado' });
+        }
+
+        const pedido = pedidoRes.rows[0];
+
+        // 2. Obtener los ítems (productos) del detalle del pedido (usando nombre_producto)
+        const itemsQuery = `
+            SELECT dp.*, pr.nombre_producto AS producto_nombre
+            FROM detalle_pedidos dp
+            JOIN productos pr ON dp.id_producto = pr.id_producto
+            WHERE dp.id_pedido = $1;
+        `;
+        const itemsRes = await db.query(itemsQuery, [id]);
+
+        // 3. Para cada ítem, buscar sus opciones/toppings asociados
+        const itemsConOpciones = await Promise.all(itemsRes.rows.map(async (item) => {
+            const opcionesQuery = `
+                SELECT tipo_opcion, nombre_opcion, costo_adicional
+                FROM detalle_opciones
+                WHERE id_detalle = $1;
+            `;
+            const opcionesRes = await db.query(opcionesQuery, [item.id_detalle]);
+            return {
+                ...item,
+                opciones: opcionesRes.rows
+            };
+        }));
+
+        res.json({
+            pedido,
+            items: itemsConOpciones
+        });
+
+    } catch (error) {
+        console.error("Error al obtener detalle del pedido:", error);
+        res.status(500).json({ error: 'Error al obtener el detalle del pedido' });
+    }
+};
+
 // Eliminar un pedido (ej. entregados o cancelados)
 const eliminarPedido = async (req, res) => {
     try {
@@ -143,5 +201,6 @@ module.exports = {
     crearPedido,
     obtenerPedidosAdmin,
     actualizarEstadoPedido,
-    eliminarPedido
+    eliminarPedido,
+    obtenerDetallePedidoAdmin
 };
