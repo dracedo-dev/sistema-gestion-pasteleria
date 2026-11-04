@@ -76,4 +76,29 @@ const deleteCliente = async (req, res) => {
   }
 };
 
-module.exports = { getClientes, createCliente, updateCliente, deleteCliente };
+// Obtener historial y pedidos en curso de un cliente específico
+const obtenerPedidosPorCliente = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const query = `
+            SELECT p.*, 
+                   COALESCE(hep.estado_nuevo, p.estado_pedido) AS ultimo_estado
+            FROM pedidos p
+            LEFT JOIN LATERAL (
+                SELECT estado_nuevo 
+                FROM historial_estados_pedidos 
+                WHERE id_pedido = p.id_pedido 
+                ORDER BY fecha_cambio DESC LIMIT 1
+            ) hep ON true
+            WHERE p.id_cliente = $1
+            ORDER BY p.fecha_pedido DESC;
+        `;
+        const { rows } = await db.query(query, [id]);
+        res.json(rows);
+    } catch (error) {
+        console.error("Error al obtener pedidos del cliente:", error);
+        res.status(500).json({ error: 'Error al obtener el historial del cliente' });
+    }
+};
+
+module.exports = { getClientes, createCliente, updateCliente, deleteCliente, obtenerPedidosPorCliente };

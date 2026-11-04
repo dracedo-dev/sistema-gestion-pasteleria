@@ -10,6 +10,21 @@ const crearPedido = async (req, res) => {
 
         const { id_cliente, monto_subtotal, monto_descuento, monto_final, canal_notificacion, items } = req.body;
 
+        // 🌟 NUEVO: Verificar cuántos pedidos completados tiene el cliente para aplicar el descuento recurrente (15% en cada 4to pedido)
+        const clienteRes = await client.query('SELECT pedidos_completados FROM clientes WHERE id_cliente = $1', [id_cliente]);
+        const pedidosCompletados = clienteRes.rows.length > 0 ? clienteRes.rows[0].pedidos_completados : 0;
+        
+        const aplicaDescuentoFrecuencia = (pedidosCompletados > 0 && pedidosCompletados % 4 === 3);
+
+        let descuentoFinal = monto_descuento || 0;
+        let finalMonto = monto_final;
+
+        if (aplicaDescuentoFrecuencia) {
+            const descuentoExtra = monto_subtotal * 0.15;
+            descuentoFinal += descuentoExtra;
+            finalMonto = monto_subtotal - descuentoFinal;
+        }
+
         // Generar un código único para el pedido (ej: PED-1729...)
         const codigo_unico = 'PED-' + Math.floor(100000 + Math.random() * 900000);
 
@@ -24,8 +39,8 @@ const crearPedido = async (req, res) => {
             id_cliente, 
             'Pendiente', // estado_pedido
             monto_subtotal, 
-            monto_descuento || 0, 
-            monto_final, 
+            descuentoFinal, 
+            finalMonto, 
             canal_notificacion || 'WhatsApp'
         ];
         
@@ -65,7 +80,8 @@ const crearPedido = async (req, res) => {
         res.status(201).json({ 
             message: 'Pedido registrado con éxito', 
             id_pedido, 
-            codigo_unico 
+            codigo_unico,
+            descuento_aplicado: aplicaDescuentoFrecuencia
         });
 
     } catch (err) {
@@ -98,26 +114,50 @@ const obtenerPedidosAdmin = async (req, res) => {
 
 // Actualizar el estado del pedido (ej. de 'Pendiente' a 'En preparación', 'Listo', 'Entregado')
 const actualizarEstadoPedido = async (req, res) => {
+    const client = await pool.connect();
     try {
+        await client.query('BEGIN');
+
         const { id } = req.params;
         const { estado_pedido } = req.body;
 
+        // 1. Obtener el estado actual y el id_cliente del pedido antes de actualizar
+        const pedidoAnteriorRes = await client.query('SELECT estado_pedido, id_cliente FROM pedidos WHERE id_pedido = $1', [id]);
+        if (pedidoAnteriorRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Pedido no encontrado' });
+        }
+
+        const estadoAnterior = pedidoAnteriorRes.rows[0].estado_pedido;
+        const idCliente = pedidoAnteriorRes.rows[0].id_cliente;
+
+        // 2. Actualizar el estado del pedido
         const query = `
             UPDATE pedidos 
             SET estado_pedido = $1 
             WHERE id_pedido = $2 
             RETURNING *;
         `;
-        const { rows } = await db.query(query, [estado_pedido, id]);
+        const { rows } = await client.query(query, [estado_pedido, id]);
+        const pedidoActualizado = rows[0];
 
-        if (rows.length === 0) {
-            return res.status(404).json({ error: 'Pedido no encontrado' });
+        // 🌟 3. Si el pedido pasa a "Entregado" y antes NO estaba entregado, sumamos +1 a pedidos_completados
+        if (estado_pedido.toLowerCase() === 'entregado' && estadoAnterior.toLowerCase() !== 'entregado') {
+            await client.query(
+                'UPDATE clientes SET pedidos_completados = pedidos_completados + 1 WHERE id_cliente = $1',
+                [idCliente]
+            );
         }
 
-        res.json({ message: 'Estado actualizado con éxito', pedido: rows[0] });
+        await client.query('COMMIT');
+        res.json({ message: 'Estado actualizado con éxito', pedido: pedidoActualizado });
+
     } catch (error) {
+        await client.query('ROLLBACK');
         console.error("Error al actualizar estado del pedido:", error);
         res.status(500).json({ error: 'Error al actualizar el estado' });
+    } finally {
+        client.release();
     }
 };
 

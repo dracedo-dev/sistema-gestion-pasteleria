@@ -94,6 +94,7 @@
         const API = 'http://localhost:3000/api';
         let carrito = JSON.parse(localStorage.getItem('carrito')) || [];
         let productoSeleccionadoTemporal = null;
+        let tieneDescuentoFrecuencia = false; // 🌟 Variable global para saber si aplica el 15%
 
         const usuarioGuardado = JSON.parse(localStorage.getItem('usuarioLogueado'));
         if (usuarioGuardado && usuarioGuardado.nombre_completo) {
@@ -104,6 +105,38 @@
             localStorage.removeItem('usuarioLogueado');
             localStorage.removeItem('carrito');
             window.location.href = '../login.html';
+        }
+
+        // 🌟 NUEVO: Consultar estado del cliente para ver si su próximo pedido tiene el 15% OFF
+        async function verificarDescuentoCliente() {
+            if (!usuarioGuardado || !usuarioGuardado.id_cliente) return;
+            try {
+                const res = await fetch(`${API}/clientes`);
+                const clientes = await res.json();
+                const clienteActual = clientes.find(c => c.id_cliente === usuarioGuardado.id_cliente);
+                
+                if (clienteActual) {
+                    const completados = clienteActual.pedidos_completados || 0;
+                    // Si tiene 3, 7, 11... completados, el siguiente es el que tiene el 15% OFF
+                    if (completados > 0 && completados % 4 === 3) {
+                        tieneDescuentoFrecuencia = true;
+                        mostrarBannerDescuento();
+                    }
+                }
+            } catch (err) {
+                console.error('Error al verificar descuento del cliente:', err);
+            }
+        }
+
+        function mostrarBannerDescuento() {
+            const contenedorPrincipal = document.querySelector('.container.my-4');
+            const banner = document.createElement('div');
+            banner.className = 'alert alert-success alert-dismissible fade show shadow-sm mb-4';
+            banner.innerHTML = `
+                <strong>🎉 ¡Felicitaciones!</strong> Has alcanzado los pedidos requeridos. <strong>¡Tu próximo pedido tiene un 15% de descuento automático</strong> por cliente frecuente!
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            contenedorPrincipal.insertBefore(banner, contenedorPrincipal.firstChild);
         }
 
         // 1. Cargar Catálogo de Productos
@@ -149,11 +182,9 @@
             productoSeleccionadoTemporal = producto;
             document.getElementById('tituloModalProducto').innerText = `Personalizar: ${producto.nombre_producto}`;
             
-            // Mostrar modal de Bootstrap
             const modal = new bootstrap.Modal(document.getElementById('modalPersonalizar'));
             modal.show();
 
-            // Cargar toppings desde el backend
             try {
                 const res = await fetch(`${API}/insumos/toppings`);
                 const toppings = await res.json();
@@ -181,33 +212,29 @@
         function confirmarAgregadoConToppings() {
             if (!productoSeleccionadoTemporal) return;
 
-            // Recolectar checkboxes marcados
             const checkboxes = document.querySelectorAll('.topping-check:checked');
             const opcionesSeleccionadas = Array.from(checkboxes).map(cb => ({
                 tipo_opcion: 'Topping',
                 nombre_opcion: cb.value,
-                costo_adicional: 0 // Puedes asignarle costo si deseas
+                costo_adicional: 0
             }));
 
-            // Creamos un identificador único para el carrito si el producto tiene combinaciones de opciones únicas, o agrupamos por ID
             const itemCarrito = {
                 ...productoSeleccionadoTemporal,
                 cantidad: 1,
                 opciones: opcionesSeleccionadas
             };
 
-            // Validar si ya existe el mismo producto con las mismas opciones (simplificado: por ID de producto)
             const index = carrito.findIndex(i => i.id_producto === itemCarrito.id_producto);
             if (index > -1) {
                 carrito[index].cantidad += 1;
-                carrito[index].opciones = opcionesSeleccionadas; // Actualiza opciones si cambió
+                carrito[index].opciones = opcionesSeleccionadas;
             } else {
                 carrito.push(itemCarrito);
             }
 
             guardarYActualizarCarrito();
 
-            // Cerrar modal
             const modalEl = document.getElementById('modalPersonalizar');
             const modal = bootstrap.Modal.getInstance(modalEl);
             if (modal) modal.hide();
@@ -246,12 +273,11 @@
                 return;
             }
 
-            let total = 0;
+            let subtotalGeneral = 0;
             lista.innerHTML = carrito.map(item => {
-                const subtotal = item.precio * item.cantidad;
-                total += subtotal;
+                const subtotalItem = item.precio * item.cantidad;
+                subtotalGeneral += subtotalItem;
 
-                // Renderizar los toppings seleccionados en el resumen del carrito si los tiene
                 let htmlOpciones = '';
                 if (item.opciones && item.opciones.length > 0) {
                     htmlOpciones = `<div class="small text-primary">Toppings: ${item.opciones.map(o => o.nombre_opcion).join(', ')}</div>`;
@@ -275,7 +301,35 @@
                 `;
             }).join('');
 
-            totalSpan.innerText = `$${total.toFixed(2)}`;
+            // 🌟 Calcular Descuento si aplica
+            let descuento = 0;
+            let htmlDescuento = '';
+
+            if (tieneDescuentoFrecuencia) {
+                descuento = subtotalGeneral * 0.15;
+                htmlDescuento = `
+                    <div class="d-flex justify-content-between mb-2 text-success small">
+                        <span>Descuento Frecuente (15% OFF):</span>
+                        <span>-$${descuento.toFixed(2)}</span>
+                    </div>
+                `;
+            }
+
+            const totalFinal = subtotalGeneral - descuento;
+
+            // Inyectar desglose de subtotal, descuento opcional y total en el offcanvas
+            const contenedorTotales = totalSpan.closest('div').parentElement;
+            
+            // Verificamos si ya existe el contenedor de subtotal/descuento para actualizarlo o crearlo
+            let desgloseExtra = document.getElementById('desgloseDescuentoCarrito');
+            if (!desgloseExtra) {
+                desgloseExtra = document.createElement('div');
+                desgloseExtra.id = 'desgloseDescuentoCarrito';
+                contenedorTotales.insertBefore(desgloseExtra, totalSpan.closest('div'));
+            }
+
+            desgloseExtra.innerHTML = htmlDescuento;
+            totalSpan.innerText = `$${totalFinal.toFixed(2)}`;
         }
 
         // 5. Procesar Pedido y enviarlo al Backend
@@ -292,12 +346,14 @@
             }
 
             const montoSubtotal = carrito.reduce((acc, i) => acc + (i.precio * i.cantidad), 0);
+            const montoDescuento = tieneDescuentoFrecuencia ? montoSubtotal * 0.15 : 0;
+            const montoFinal = montoSubtotal - montoDescuento;
 
             const datosPedido = {
-                id_cliente: usuarioGuardado.id_cliente, // 👈 Usar explícitamente el id_cliente de la tabla clientes
+                id_cliente: usuarioGuardado.id_cliente,
                 monto_subtotal: montoSubtotal,
-                monto_descuento: 0.00,
-                monto_final: montoSubtotal,
+                monto_descuento: montoDescuento,
+                monto_final: montoFinal,
                 canal_notificacion: 'WhatsApp',
                 items: carrito.map(i => ({
                     id_producto: i.id_producto,
@@ -328,6 +384,9 @@
                 const offcanvas = bootstrap.Offcanvas.getInstance(offcanvasEl);
                 if (offcanvas) offcanvas.hide();
 
+                // Recargar página para actualizar estados
+                location.reload();
+
             } catch (err) {
                 console.error('Error al enviar pedido:', err);
                 alert('Error de conexión con el servidor.');
@@ -335,6 +394,7 @@
         }
 
         // Inicializar al cargar
+        verificarDescuentoCliente();
         cargarCatalogoCliente();
         renderizarCarrito();
     </script>

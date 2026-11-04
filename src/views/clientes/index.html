@@ -96,6 +96,26 @@
         </div>
     </div>
 
+    <!-- MODAL HISTORIAL Y PEDIDOS DEL CLIENTE -->
+    <div class="modal fade" id="modalHistorialCliente" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title" id="tituloHistorialCliente">Historial de Pedidos</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="contenidoHistorialCliente">
+                        <!-- Se inyecta dinámicamente -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -193,20 +213,30 @@
                 return;
             }
 
-            tbody.innerHTML = datosPagina.map(c => `
-                <tr>
-                    <td>${c.id_cliente}</td>
-                    <td>${c.dni || '-'}</td>
-                    <td class="fw-bold">${c.nombre_completo}</td>
-                    <td>${c.telefono || '-'}</td>
-                    <td>${c.email || '-'}</td>
-                    <td><span class="badge bg-info text-dark">${c.pedidos_completados || 0}</span></td>
-                    <td class="text-center">
-                        <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarCliente(${c.id_cliente}, '${c.dni || ''}', '${c.nombre_completo}', '${c.telefono || ''}', '${c.email || ''}')">✏️</button>
-                        <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarCliente(${c.id_cliente})">🗑️</button>
-                    </td>
-                </tr>
-            `).join('');
+            tbody.innerHTML = datosPagina.map(c => {
+                const pedidosCompletados = c.pedidos_completados || 0;
+                // Condición: Si tiene 3, 7, 11... pedidos completados, el próximo (4to, 8vo...) tiene 15% off
+                const tieneDescuentoPendiente = (pedidosCompletados > 0 && pedidosCompletados % 4 === 3);
+
+                return `
+                    <tr>
+                        <td>${c.id_cliente}</td>
+                        <td>${c.dni || '-'}</td>
+                        <td class="fw-bold">${c.nombre_completo}</td>
+                        <td>${c.telefono || '-'}</td>
+                        <td>${c.email || '-'}</td>
+                        <td>
+                            <span class="badge bg-info text-dark">${pedidosCompletados}</span>
+                            ${tieneDescuentoPendiente ? '<span class="badge bg-success ms-1 animate__animated animate__pulse" title="¡El próximo pedido aplica un 15% de descuento por cliente recurrente!">🎁 15% OFF Próximo</span>' : ''}
+                        </td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-info text-white me-1" title="Ver Historial y Pedidos" onclick="verHistorialCliente(${c.id_cliente}, '${c.nombre_completo}')">📜</button>
+                            <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarCliente(${c.id_cliente}, '${c.dni || ''}', '${c.nombre_completo}', '${c.telefono || ''}', '${c.email || ''}')">✏️</button>
+                            <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarCliente(${c.id_cliente})">🗑️</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
 
             renderizarPaginacionClientes();
         };
@@ -268,6 +298,80 @@
             if (!res.ok) { alert(data.error); throw new Error(data.error); }
             await cargarClientes();
         });
+
+        async function verHistorialCliente(idCliente, nombreCliente) {
+            document.getElementById('tituloHistorialCliente').innerText = `Pedidos de: ${nombreCliente}`;
+            const contenedor = document.getElementById('contenidoHistorialCliente');
+            contenedor.innerHTML = `<div class="text-center py-3"><div class="spinner-border text-info" role="status"></div></div>`;
+            
+            abrirModal('modalHistorialCliente');
+
+            try {
+                const res = await fetch(`${API}/clientes/${idCliente}/pedidos`, {
+                    headers: obtenerHeaders(),
+                    credentials: 'include'
+                });
+                const pedidos = await res.json();
+
+                if (pedidos.length === 0) {
+                    contenedor.innerHTML = `<p class="text-center text-muted my-3">Este cliente aún no registra pedidos en el sistema.</p>`;
+                    return;
+                }
+
+                // Separar en pedidos en curso y finalizados
+                const enCurso = pedidos.filter(p => p.estado_pedido.toLowerCase() !== 'entregado' && p.estado_pedido.toLowerCase() !== 'cancelado');
+                const historial = pedidos.filter(p => p.estado_pedido.toLowerCase() === 'entregado' || p.estado_pedido.toLowerCase() === 'cancelado');
+
+                let html = `<h6>🔄 Pedidos en Curso</h6>`;
+                if (enCurso.length === 0) {
+                    html += `<p class="text-muted small">No tiene pedidos activos en este momento.</p>`;
+                } else {
+                    html += generarTablaPedidosModal(enCurso, 'warning');
+                }
+
+                html += `<h6 class="mt-4">📜 Historial de Pedidos Anteriores</h6>`;
+                if (historial.length === 0) {
+                    html += `<p class="text-muted small">No hay pedidos finalizados registrados.</p>`;
+                } else {
+                    html += generarTablaPedidosModal(historial, 'success');
+                }
+
+                contenedor.innerHTML = html;
+
+            } catch (err) {
+                console.error(err);
+                contenedor.innerHTML = `<p class="text-danger text-center">Error al cargar el historial del cliente.</p>`;
+            }
+        }
+
+        function generarTablaPedidosModal(lista, tipoBadge) {
+            return `
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Código</th>
+                                <th>Fecha</th>
+                                <th>Total</th>
+                                <th>Canal</th>
+                                <th class="text-center">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${lista.map(p => `
+                                <tr>
+                                    <td><span class="fw-bold text-primary">${p.codigo_unico}</span></td>
+                                    <td>${new Date(p.fecha_pedido).toLocaleDateString()}</td>
+                                    <td>$${Number(p.monto_final).toFixed(2)}</td>
+                                    <td>${p.canal_venta || 'Web'}</td>
+                                    <td class="text-center"><span class="badge bg-${tipoBadge}">${p.estado_pedido}</span></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
 
         // Carga inicial
         cargarClientes();
