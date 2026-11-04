@@ -1,3 +1,4 @@
+const db = require('../config/db');
 const pool = require('../config/db'); // Importar el pool directamente
 
 const crearPedido = async (req, res) => {
@@ -76,6 +77,71 @@ const crearPedido = async (req, res) => {
     }
 };
 
+// Listar todos los pedidos con los datos del cliente (para el Admin)
+const obtenerPedidosAdmin = async (req, res) => {
+    try {
+        const query = `
+            SELECT p.id_pedido, p.codigo_unico, p.fecha_pedido, p.estado_pedido, 
+                   p.monto_final, p.canal_notificacion, p.pago_confirmado,
+                   c.nombre_completo AS cliente_nombre, c.telefono AS cliente_telefono, c.email AS cliente_email
+            FROM pedidos p
+            JOIN clientes c ON p.id_cliente = c.id_cliente
+            ORDER BY p.fecha_pedido DESC;
+        `;
+        const { rows } = await db.query(query);
+        res.json(rows);
+    } catch (error) {
+        console.error("Error al obtener pedidos para admin:", error);
+        res.status(500).json({ error: 'Error al obtener los pedidos' });
+    }
+};
+
+// Actualizar el estado del pedido (ej. de 'Pendiente' a 'En preparación', 'Listo', 'Entregado')
+const actualizarEstadoPedido = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { estado_pedido } = req.body;
+
+        const query = `
+            UPDATE pedidos 
+            SET estado_pedido = $1 
+            WHERE id_pedido = $2 
+            RETURNING *;
+        `;
+        const { rows } = await db.query(query, [estado_pedido, id]);
+
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Pedido no encontrado' });
+        }
+
+        res.json({ message: 'Estado actualizado con éxito', pedido: rows[0] });
+    } catch (error) {
+        console.error("Error al actualizar estado del pedido:", error);
+        res.status(500).json({ error: 'Error al actualizar el estado' });
+    }
+};
+
+// Eliminar un pedido (ej. entregados o cancelados)
+const eliminarPedido = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const query = 'DELETE FROM pedidos WHERE id_pedido = $1 RETURNING *;';
+        const { rows } = await db.query(query, [id]);
+
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Pedido no encontrado' });
+        }
+
+        res.json({ message: 'Pedido eliminado correctamente' });
+    } catch (error) {
+        console.error("Error al eliminar pedido:", error);
+        res.status(500).json({ error: 'Error al eliminar el pedido' });
+    }
+};
+
 module.exports = { 
-    crearPedido
+    crearPedido,
+    obtenerPedidosAdmin,
+    actualizarEstadoPedido,
+    eliminarPedido
 };
