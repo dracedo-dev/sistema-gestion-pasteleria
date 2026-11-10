@@ -213,7 +213,6 @@
 
         async function cargarHeader() {
             try {
-                // Como las vistas están servidas desde el servidor, puedes apuntar directamente a tu partials
                 const response = await fetch('/partials/header.html'); 
                 if (response.ok) {
                     const html = await response.text();
@@ -245,6 +244,7 @@
                         opcionesHtml += '</small></ul>';
                     }
 
+                    const subtotalItem = Number(item.cantidad) * Number(item.precio_unitario);
                     htmlItems += `
                         <tr>
                             <td>
@@ -253,10 +253,34 @@
                             </td>
                             <td class="text-center">${item.cantidad}</td>
                             <td class="text-end">$${Number(item.precio_unitario).toFixed(2)}</td>
-                            <td class="text-end">$${(item.cantidad * item.precio_unitario).toFixed(2)}</td>
+                            <td class="text-end">$${subtotalItem.toFixed(2)}</td>
                         </tr>
                     `;
                 });
+
+                // 💳 Información de Pago y Previsualización Directa de la Imagen
+                const metodoPago = pedido.metodo_pago || 'Efectivo al Retirar';
+                let comprobanteHtml = '<span class="text-muted">Sin comprobante adjunto (Pago en efectivo)</span>';
+
+                if (pedido.comprobante_pago) {
+                    comprobanteHtml = `
+                        <div class="mb-2">
+                            <span class="fw-bold text-dark"><i class="fas fa-file-image me-1"></i> ${pedido.comprobante_pago}</span>
+                        </div>
+                        <div class="border rounded p-2 bg-white text-center">
+                            <img src="/uploads/${pedido.comprobante_pago}" alt="Comprobante de Pago" class="img-fluid rounded shadow-sm" style="max-height: 250px; object-fit: contain;" onerror="this.onerror=null; this.src='https://placehold.co/400x200?text=Comprobante+no+encontrado';">
+                        </div>
+                        <div class="mt-2 text-end">
+                            <a href="/uploads/${pedido.comprobante_pago}" target="_blank" class="btn btn-outline-secondary btn-sm">
+                                <i class="fas fa-search-plus me-1"></i> Ver imagen en tamaño completo
+                            </a>
+                        </div>
+                    `;
+                }
+                
+                const estadoPagoBadge = pedido.pago_confirmado 
+                    ? '<span class="badge bg-success">Confirmado ✅</span>' 
+                    : '<span class="badge bg-warning text-dark">Pendiente de Verificación ⏳</span>';
 
                 const contenido = `
                     <div class="row mb-3">
@@ -289,14 +313,32 @@
                             </tbody>
                         </table>
                     </div>
-                    <div class="text-end mt-3">
+                    <div class="text-end mt-3 mb-4">
                         <h5>Total Final: <span class="text-success">$${Number(pedido.monto_final).toFixed(2)}</span></h5>
+                    </div>
+
+                    <!-- 💳 APARTADO DE PAGO Y VERIFICACIÓN -->
+                    <hr>
+                    <h5 class="fw-bold mb-3"><i class="fas fa-credit-card me-2"></i> Verificación de Pago</h5>
+                    <div class="bg-light p-3 rounded mb-3 small">
+                        <div class="mb-2"><strong>Método de Pago:</strong> ${metodoPago}</div>
+                        <div class="mb-2"><strong>Comprobante de Pago:</strong></div>
+                        ${comprobanteHtml}
+                        <div class="mt-2"><strong>Estado Actual:</strong> ${estadoPagoBadge}</div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-success btn-sm fw-bold w-50 py-2" onclick="cambiarEstadoPago(${pedido.id_pedido}, true)">
+                            ✅ Confirmar Pago y Pedido
+                        </button>
+                        <button class="btn btn-danger btn-sm fw-bold w-50 py-2" onclick="pedirMotivoError(${pedido.id_pedido})">
+                            ❌ Informar Error / Notificar
+                        </button>
                     </div>
                 `;
 
                 document.getElementById('contenidoDetalleModal').innerHTML = contenido;
 
-                // Mostrar el modal usando Bootstrap
                 const modal = new bootstrap.Modal(document.getElementById('modalDetallePedido'));
                 modal.show();
 
@@ -306,10 +348,38 @@
             }
         }
 
-        // Ejecutar al cargar la página junto con la carga de pedidos
+        // Funciones para manejar la verificación de pagos
+        async function cambiarEstadoPago(idPedido, confirmado, motivo = '') {
+            try {
+                const res = await fetch(`${API}/${idPedido}/pago`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pago_confirmado: confirmado, motivo_error: motivo })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.error || 'Error al actualizar el pago');
+                    return;
+                }
+                alert(confirmado ? '¡Pago confirmado con éxito! Se notificó al cliente por correo.' : 'Se ha notificado el error al cliente por correo. Recuerde comunicarse por WhatsApp.');
+                location.reload(); 
+            } catch (err) {
+                console.error('Error:', err);
+                alert('Error de conexión con el servidor.');
+            }
+        }
+
+        function pedirMotivoError(idPedido) {
+            const motivo = prompt('Ingrese el motivo del error en el pago o pedido (se le enviará por correo al cliente):', 'El comprobante no es legible o el monto no coincide.');
+            if (motivo !== null) {
+                cambiarEstadoPago(idPedido, false, motivo);
+            }
+        }
+
+        // Ejecutar al cargar la página
         document.addEventListener('DOMContentLoaded', () => {
             cargarHeader();
-            cargarPedidos(); // tu función para traer los pedidos de la tabla
+            cargarPedidos();
         });
     </script>
 </body>

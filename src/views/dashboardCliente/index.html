@@ -43,23 +43,20 @@
         </button>
     </div>
 
-    <!-- Offcanvas / Sidebar del Carrito -->
+    <!-- Offcanvas / Sidebar del Carrito y Checkout -->
     <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasCarrito">
         <div class="offcanvas-header bg-dark text-white">
-            <h5 class="offcanvas-title">🛒 Tu Carrito de Compras</h5>
+            <h5 class="offcanvas-title" id="tituloOffcanvas">🛒 Tu Carrito de Compras</h5>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
         </div>
         <div class="offcanvas-body d-flex flex-column justify-content-between">
-            <div id="listaCarrito" class="flex-grow-1 overflow-auto">
-                <p class="text-muted text-center mt-4">El carrito está vacío.</p>
+            <!-- Contenedor dinámico que cambia entre Carrito y Checkout de Pago -->
+            <div id="contenidoOffcanvas" class="flex-grow-1 overflow-auto">
+                <!-- Se renderiza vía JS -->
             </div>
-            <div>
-                <hr>
-                <div class="d-flex justify-content-between mb-3">
-                    <strong class="fs-5">Total:</strong>
-                    <span id="totalCarrito" class="fs-5 fw-bold text-success">$0.00</span>
-                </div>
-                <button class="btn btn-success w-100 py-2 fw-bold" onclick="procesarPedido()">Confirmar Pedido</button>
+            
+            <div id="footerOffcanvas">
+                <!-- Botones de acción dinámicos -->
             </div>
         </div>
     </div>
@@ -75,7 +72,6 @@
                 <div class="modal-body">
                     <p class="text-muted small">Selecciona los toppings o adicionales que deseas incluir:</p>
                     <div id="listaToppingsModal" class="mb-3">
-                        <!-- Los toppings se cargan aquí dinámicamente -->
                         <p class="text-muted small">Cargando toppings...</p>
                     </div>
                 </div>
@@ -94,7 +90,8 @@
         const API = 'http://localhost:3000/api';
         let carrito = JSON.parse(localStorage.getItem('carrito')) || [];
         let productoSeleccionadoTemporal = null;
-        let tieneDescuentoFrecuencia = false; // 🌟 Variable global para saber si aplica el 15%
+        let tieneDescuentoFrecuencia = false; 
+        let pasoActual = 'carrito'; // 'carrito' o 'pago'
 
         const usuarioGuardado = JSON.parse(localStorage.getItem('usuarioLogueado'));
         if (usuarioGuardado && usuarioGuardado.nombre_completo) {
@@ -107,7 +104,6 @@
             window.location.href = '../login.html';
         }
 
-        // 🌟 NUEVO: Consultar estado del cliente para ver si su próximo pedido tiene el 15% OFF
         async function verificarDescuentoCliente() {
             if (!usuarioGuardado || !usuarioGuardado.id_cliente) return;
             try {
@@ -117,7 +113,6 @@
                 
                 if (clienteActual) {
                     const completados = clienteActual.pedidos_completados || 0;
-                    // Si tiene 3, 7, 11... completados, el siguiente es el que tiene el 15% OFF
                     if (completados > 0 && completados % 4 === 3) {
                         tieneDescuentoFrecuencia = true;
                         mostrarBannerDescuento();
@@ -139,7 +134,6 @@
             contenedorPrincipal.insertBefore(banner, contenedorPrincipal.firstChild);
         }
 
-        // 1. Cargar Catálogo de Productos
         async function cargarCatalogoCliente() {
             try {
                 const res = await fetch(`${API}/productos`);
@@ -177,7 +171,6 @@
             }
         }
 
-        // 2. Abrir Modal y cargar Toppings
         async function abrirModalPersonalizacion(producto) {
             productoSeleccionadoTemporal = producto;
             document.getElementById('tituloModalProducto').innerText = `Personalizar: ${producto.nombre_producto}`;
@@ -208,7 +201,6 @@
             }
         }
 
-        // 3. Confirmar adición con los toppings seleccionados al carrito
         function confirmarAgregadoConToppings() {
             if (!productoSeleccionadoTemporal) return;
 
@@ -242,7 +234,6 @@
             alert('¡Producto agregado al carrito!');
         }
 
-        // 4. Cambiar cantidad o eliminar desde el offcanvas
         function cambiarCantidad(id_producto, delta) {
             const item = carrito.find(i => i.id_producto === id_producto);
             if (item) {
@@ -259,17 +250,28 @@
             renderizarCarrito();
         }
 
+        // Renderizado Dinámico del Carrito o del Checkout según pasoActual
         function renderizarCarrito() {
-            const lista = document.getElementById('listaCarrito');
             const contador = document.getElementById('contadorCarrito');
-            const totalSpan = document.getElementById('totalCarrito');
-
             const totalItems = carrito.reduce((acc, item) => acc + item.cantidad, 0);
             contador.innerText = totalItems;
 
+            if (pasoActual === 'carrito') {
+                document.getElementById('tituloOffcanvas').innerText = '🛒 Tu Carrito de Compras';
+                renderizarVistaCarrito();
+            } else {
+                document.getElementById('tituloOffcanvas').innerText = '💳 Seleccionar Pago';
+                renderizarVistaPago();
+            }
+        }
+
+        function renderizarVistaCarrito() {
+            const lista = document.getElementById('contenidoOffcanvas');
+            const footer = document.getElementById('footerOffcanvas');
+
             if (carrito.length === 0) {
                 lista.innerHTML = `<p class="text-muted text-center mt-4">El carrito está vacío.</p>`;
-                totalSpan.innerText = '$0.00';
+                footer.innerHTML = '';
                 return;
             }
 
@@ -301,10 +303,8 @@
                 `;
             }).join('');
 
-            // 🌟 Calcular Descuento si aplica
             let descuento = 0;
             let htmlDescuento = '';
-
             if (tieneDescuentoFrecuencia) {
                 descuento = subtotalGeneral * 0.15;
                 htmlDescuento = `
@@ -317,57 +317,138 @@
 
             const totalFinal = subtotalGeneral - descuento;
 
-            // Inyectar desglose de subtotal, descuento opcional y total en el offcanvas
-            const contenedorTotales = totalSpan.closest('div').parentElement;
-            
-            // Verificamos si ya existe el contenedor de subtotal/descuento para actualizarlo o crearlo
-            let desgloseExtra = document.getElementById('desgloseDescuentoCarrito');
-            if (!desgloseExtra) {
-                desgloseExtra = document.createElement('div');
-                desgloseExtra.id = 'desgloseDescuentoCarrito';
-                contenedorTotales.insertBefore(desgloseExtra, totalSpan.closest('div'));
-            }
-
-            desgloseExtra.innerHTML = htmlDescuento;
-            totalSpan.innerText = `$${totalFinal.toFixed(2)}`;
+            footer.innerHTML = `
+                <hr>
+                ${htmlDescuento}
+                <div class="d-flex justify-content-between mb-3">
+                    <strong class="fs-5">Total:</strong>
+                    <span class="fs-5 fw-bold text-success">$${totalFinal.toFixed(2)}</span>
+                </div>
+                <button class="btn btn-success w-100 py-2 fw-bold" onclick="irAlCheckout()">Continuar al Pago ➡️</button>
+            `;
         }
 
-        // 5. Procesar Pedido y enviarlo al Backend
-        async function procesarPedido() {
+        function irAlCheckout() {
             if (carrito.length === 0) {
                 alert('Tu carrito está vacío.');
                 return;
             }
+            pasoActual = 'pago';
+            renderizarCarrito();
+        }
 
-            if (!usuarioGuardado || !usuarioGuardado.id_usuario) {
-                alert('Debes iniciar sesión para confirmar el pedido.');
+        function volverAlCarrito() {
+            pasoActual = 'carrito';
+            renderizarCarrito();
+        }
+
+        function renderizarVistaPago() {
+            const contenedor = document.getElementById('contenidoOffcanvas');
+            const footer = document.getElementById('footerOffcanvas');
+
+            const subtotalGeneral = carrito.reduce((acc, i) => acc + (i.precio * i.cantidad), 0);
+            const descuento = tieneDescuentoFrecuencia ? subtotalGeneral * 0.15 : 0;
+            const totalFinal = subtotalGeneral - descuento;
+
+            contenedor.innerHTML = `
+                <div class="py-2">
+                    <h6 class="fw-bold mb-3">Resumen de tu Pedido</h6>
+                    <div class="bg-light p-3 rounded mb-4 small">
+                        <div class="d-flex justify-content-between"><span>Subtotal:</span> <span>$${subtotalGeneral.toFixed(2)}</span></div>
+                        ${tieneDescuentoFrecuencia ? `<div class="d-flex justify-content-between text-success"><span>Descuento (15%):</span> <span>-$${descuento.toFixed(2)}</span></div>` : ''}
+                        <hr class="my-2">
+                        <div class="d-flex justify-content-between fw-bold fs-6"><span>Total Final:</span> <span class="text-success">$${totalFinal.toFixed(2)}</span></div>
+                    </div>
+
+                    <h6 class="fw-bold mb-3">Selecciona el Medio de Pago</h6>
+                    <div class="mb-3">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="metodoPago" id="pagoTransferencia" value="Transferencia Bancaria" checked onchange="toggleComprobante()">
+                            <label class="form-check-label" for="pagoTransferencia">Transferencia Bancaria (Alias/CBU)</label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="metodoPago" id="pagoMercadoPago" value="Mercado Pago" onchange="toggleComprobante()">
+                            <label class="form-check-label" for="pagoMercadoPago">Mercado Pago (Alias)</label>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="radio" name="metodoPago" id="pagoEfectivo" value="Efectivo al Retirar" onchange="toggleComprobante()">
+                            <label class="form-check-label" for="pagoEfectivo">Efectivo al Retirar en Local</label>
+                        </div>
+                    </div>
+
+                    <!-- Sección Comprobante (Dinámica) -->
+                    <div id="seccionComprobante" class="mb-3">
+                        <label class="form-label fw-bold small">Adjuntar Comprobante de Pago:</label>
+                        <input class="form-control form-control-sm" type="file" id="inputComprobante" accept="image/*,.pdf">
+                        <small class="text-muted" style="font-size: 0.75rem;">Sube captura de pantalla o PDF de la transferencia.</small>
+                    </div>
+                </div>
+            `;
+
+            footer.innerHTML = `
+                <hr>
+                <button class="btn btn-primary w-100 py-2 fw-bold mb-2" onclick="procesarPedidoConPago()">Confirmar y Enviar Pedido 🚀</button>
+                <button class="btn btn-outline-secondary w-100 btn-sm" onclick="volverAlCarrito()">⬅️ Volver al Carrito</button>
+            `;
+        }
+
+        function toggleComprobante() {
+            const efectivo = document.getElementById('pagoEfectivo').checked;
+            const seccion = document.getElementById('seccionComprobante');
+            if (efectivo) {
+                seccion.style.display = 'none';
+            } else {
+                seccion.style.display = 'block';
+            }
+        }
+
+        // 5. Procesar Pedido y enviarlo al Backend con Método y Comprobante
+// 5. Procesar Pedido y enviarlo al Backend con FormData (Multer)
+        async function procesarPedidoConPago() {
+            // Asegurarnos de recuperar los datos actualizados del cliente desde localStorage
+            const usuarioActual = JSON.parse(localStorage.getItem('usuarioLogueado'));
+
+            if (!usuarioActual || !usuarioActual.id_cliente) {
+                alert('No se encontró el perfil de cliente asociado a este usuario. Por favor vuelve a iniciar sesión.');
                 window.location.href = '../login.html';
                 return;
             }
+
+            const metodoPago = document.querySelector('input[name="metodoPago"]:checked').value;
+            const inputComp = document.getElementById('inputComprobante');
 
             const montoSubtotal = carrito.reduce((acc, i) => acc + (i.precio * i.cantidad), 0);
             const montoDescuento = tieneDescuentoFrecuencia ? montoSubtotal * 0.15 : 0;
             const montoFinal = montoSubtotal - montoDescuento;
 
-            const datosPedido = {
-                id_cliente: usuarioGuardado.id_cliente,
-                monto_subtotal: montoSubtotal,
-                monto_descuento: montoDescuento,
-                monto_final: montoFinal,
-                canal_notificacion: 'WhatsApp',
-                items: carrito.map(i => ({
-                    id_producto: i.id_producto,
-                    cantidad: i.cantidad,
-                    precio_unitario: i.precio,
-                    opciones: i.opciones || []
-                }))
-            };
+            // 🌟 Creamos el objeto FormData para enviar archivos binarios y textos de forma conjunta
+            const formData = new FormData();
+            formData.append('id_cliente', usuarioActual.id_cliente);
+            formData.append('monto_subtotal', montoSubtotal);
+            formData.append('monto_descuento', montoDescuento);
+            formData.append('monto_final', montoFinal);
+            formData.append('canal_notificacion', 'WhatsApp');
+            formData.append('metodo_pago', metodoPago);
+
+            // Adjuntar el archivo físico si el método de pago lo requiere y fue seleccionado
+            if (metodoPago !== 'Efectivo al Retirar' && inputComp && inputComp.files.length > 0) {
+                formData.append('comprobante_pago', inputComp.files[0]); // 👈 El archivo real para Multer
+            }
+
+            // Como los ítems y opciones son objetos/arrays, los enviamos serializados como texto JSON
+            formData.append('items', JSON.stringify(carrito.map(i => ({
+                id_producto: i.id_producto,
+                cantidad: i.cantidad,
+                precio_unitario: i.precio,
+                opciones: i.opciones || []
+            }))));
 
             try {
+                // ⚠️ IMPORTANTE: Al usar FormData, NO incluyas la cabecera 'Content-Type: application/json'. 
+                // El navegador asigna automáticamente el multipart/form-data correcto.
                 const res = await fetch(`${API}/pedidos`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(datosPedido)
+                    body: formData
                 });
 
                 const data = await res.json();
@@ -376,15 +457,16 @@
                     return;
                 }
 
-                alert(`¡Pedido registrado con éxito! Código: ${data.codigo_unico}`);
+                alert(`¡Pedido registrado con éxito! Código: ${data.codigo_unico}\nTe hemos enviado un correo con los detalles.`);
+                
                 carrito = [];
+                pasoActual = 'carrito';
                 guardarYActualizarCarrito();
                 
                 const offcanvasEl = document.getElementById('offcanvasCarrito');
                 const offcanvas = bootstrap.Offcanvas.getInstance(offcanvasEl);
                 if (offcanvas) offcanvas.hide();
 
-                // Recargar página para actualizar estados
                 location.reload();
 
             } catch (err) {
