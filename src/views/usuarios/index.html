@@ -11,9 +11,6 @@
 
         // 2. Verificar si no existe usuario O si el usuario NO es Administrador
         if (!usuarioGuardado || !usuarioGuardado.nombre_rol || usuarioGuardado.nombre_rol.toLowerCase() !== 'administrador') {
-            // Redirigir al login
-            // Si tu servidor Express sirve la carpeta 'views' como estática, usa '/login.html'
-            // Si accedes directamente por archivo/ruta relativa, usa '../login.html'
             window.location.href = '../login.html'; 
         }
     </script>
@@ -48,6 +45,14 @@
                 </thead>
                 <tbody id="tablaUsuarios"></tbody>
             </table>
+
+            <!-- 🌟 CONTENEDOR DE PAGINACIÓN -->
+            <nav class="d-flex justify-content-between align-items-center mt-3" aria-label="Navegación de usuarios">
+                <span id="infoPaginacion" class="text-muted small">Mostrando registros...</span>
+                <ul class="pagination mb-0" id="paginacionUsuarios">
+                    <!-- Se genera dinámicamente vía JS -->
+                </ul>
+            </nav>
         </div>
     </div>
 
@@ -90,11 +95,16 @@
         </div>
     </div>
 
-<!-- Bootstrap JS Bundle -->
+    <!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const API = 'http://localhost:3000/api';
         let listaUsuariosCache = [];
+        let usuariosFiltradosCache = [];
+        
+        // 🌟 Variables de Paginación
+        let paginaActual = 1;
+        const elementosPorPagina = 5; // Puedes cambiarlo a 8 o 10 según prefieras
 
         // Función auxiliar para incluir la autenticación en cada petición
         function obtenerHeaders() {
@@ -135,7 +145,6 @@
             document.getElementById('usuarioId').value = '';
             document.getElementById('tituloModalUsuario').innerText = 'Registrar Nuevo Usuario';
             
-            // Ocultar campo de contraseña por defecto al abrir como nuevo
             const divPassword = document.getElementById('divPasswordAdmin');
             if (divPassword) divPassword.classList.add('d-none');
             const passInput = document.getElementById('usrPassword');
@@ -154,21 +163,44 @@
                     credentials: 'include'
                 });
                 listaUsuariosCache = await res.json();
-                renderizarTablaUsuarios(listaUsuariosCache);
+                usuariosFiltradosCache = [...listaUsuariosCache];
+                paginaActual = 1; // Reiniciar a la primera página
+                renderizarTablaUsuarios();
             } catch (err) { console.error('Error al cargar usuarios:', err); }
         };
 
-        // Renderizar la tabla con el botón de estado interactivo y solo edición en acciones
-        const renderizarTablaUsuarios = (usuarios) => {
+        // 🌟 Renderizar la tabla y controles de paginación
+        const renderizarTablaUsuarios = () => {
             const tbody = document.getElementById('tablaUsuarios');
+            const paginacionUl = document.getElementById('paginacionUsuarios');
+            const infoPaginacion = document.getElementById('infoPaginacion');
             if (!tbody) return;
 
-            if (usuarios.length === 0) {
+            if (usuariosFiltradosCache.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No se encontraron usuarios.</td></tr>`;
+                if (paginacionUl) paginacionUl.innerHTML = '';
+                if (infoPaginacion) infoPaginacion.innerText = 'Sin registros';
                 return;
             }
 
-            tbody.innerHTML = usuarios.map(u => `
+            // Cálculos de Paginación
+            const totalRegistros = usuariosFiltradosCache.length;
+            const totalPaginas = Math.ceil(totalRegistros / elementosPorPagina);
+            
+            if (paginaActual > totalPaginas) paginaActual = totalPaginas;
+            if (paginaActual < 1) paginaActual = 1;
+
+            const inicio = (paginaActual - 1) * elementosPorPagina;
+            const fin = inicio + elementosPorPagina;
+            const usuariosPaginados = usuariosFiltradosCache.slice(inicio, fin);
+
+            // Texto informativo inferior
+            if (infoPaginacion) {
+                infoPaginacion.innerText = `Mostrando del ${inicio + 1} al ${Math.min(fin, totalRegistros)} de ${totalRegistros} usuarios`;
+            }
+
+            // Renderizar filas de la tabla
+            tbody.innerHTML = usuariosPaginados.map(u => `
                 <tr>
                     <td>${u.id_usuario}</td>
                     <td class="fw-bold">${u.nombre_completo}</td>
@@ -184,7 +216,43 @@
                     </td>
                 </tr>
             `).join('');
+
+            // Renderizar Botones de Paginación Bootstrap
+            if (paginacionUl) {
+                let htmlPaginacion = '';
+
+                // Botón Anterior
+                htmlPaginacion += `
+                    <li class="page-item ${paginaActual === 1 ? 'disabled' : ''}">
+                        <button class="page-link" onclick="cambiarPagina(${paginaActual - 1})">Anterior</button>
+                    </li>
+                `;
+
+                // Botones numéricos
+                for (let i = 1; i <= totalPaginas; i++) {
+                    htmlPaginacion += `
+                        <li class="page-item ${paginaActual === i ? 'active' : ''}">
+                            <button class="page-link" onclick="cambiarPagina(${i})">${i}</button>
+                        </li>
+                    `;
+                }
+
+                // Botón Siguiente
+                htmlPaginacion += `
+                    <li class="page-item ${paginaActual === totalPaginas ? 'disabled' : ''}">
+                        <button class="page-link" onclick="cambiarPagina(${paginaActual + 1})">Siguiente</button>
+                    </li>
+                `;
+
+                paginacionUl.innerHTML = htmlPaginacion;
+            }
         };
+
+        // Función para cambiar de página
+        function cambiarPagina(nuevaPagina) {
+            paginaActual = nuevaPagina;
+            renderizarTablaUsuarios();
+        }
 
         // Función para cambiar el estado al hacer clic en el botón de la tabla
         async function toggleEstadoUsuario(id) {
@@ -210,7 +278,6 @@
             document.getElementById('usrEmail').value = email;
             document.getElementById('tituloModalUsuario').innerText = 'Editar Usuario';
             
-            // Al editar, opcionalmente ocultamos o no requerimos contraseña a menos que se quiera cambiar
             const divPassword = document.getElementById('divPasswordAdmin');
             if (divPassword) divPassword.classList.add('d-none');
             const passInput = document.getElementById('usrPassword');
@@ -224,34 +291,17 @@
             modal.show();
         }
 
-        // Eliminar (dar de baja lógica) usuario
-        async function eliminarUsuario(id) {
-            if (!confirm('¿Estás seguro de dar de baja a este usuario?')) return;
-            try {
-                const res = await fetch(`${API}/usuarios/${id}`, { 
-                    method: 'DELETE',
-                    headers: obtenerHeaders(),
-                    credentials: 'include'
-                });
-                if (res.ok) {
-                    cargarUsuarios();
-                } else {
-                    const data = await res.json();
-                    alert(data.error);
-                }
-            } catch (err) { console.error('Error al eliminar:', err); }
-        }
-
-        // Buscador en tiempo real
+        // Buscador en tiempo real (reinicia a la página 1 al filtrar)
         const searchInput = document.getElementById('searchUsuario');
         if (searchInput) {
             searchInput.addEventListener('input', (e) => {
                 const valor = e.target.value.toLowerCase();
-                const filtrados = listaUsuariosCache.filter(u => 
+                usuariosFiltradosCache = listaUsuariosCache.filter(u => 
                     u.nombre_completo.toLowerCase().includes(valor) || 
                     u.email.toLowerCase().includes(valor)
                 );
-                renderizarTablaUsuarios(filtrados);
+                paginaActual = 1;
+                renderizarTablaUsuarios();
             });
         }
 

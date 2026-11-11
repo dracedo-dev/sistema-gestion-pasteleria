@@ -12,35 +12,145 @@
 
         // 2. Verificar si no existe usuario O si el usuario NO es Administrador
         if (!usuarioGuardado || !usuarioGuardado.nombre_rol || usuarioGuardado.nombre_rol.toLowerCase() !== 'administrador') {
-            // Redirigir al login
-            // Si tu servidor Express sirve la carpeta 'views' como estática, usa '/login.html'
-            // Si accedes directamente por archivo/ruta relativa, usa '../login.html'
             window.location.href = '../login.html'; 
         }
     </script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-light">
 
     <!-- Header Compartido -->
     <div id="header-container"></div>
 
-    <div class="container mt-5 text-center">
-        <div class="p-5 mb-4 bg-white rounded-3 shadow-sm">
-            <div class="container-fluid py-5">
-                <h1 class="display-5 fw-bold text-success">Panel de Administración</h1>
-                <p class="col-md-8 fs-4 mx-auto text-muted mt-3">
-                    Bienvenido al sistema de gestión interna de la pastelería artesanal. Utiliza la barra de navegación superior para administrar roles, categorías, insumos, clientes, productos y recetas.
-                </p>
-                <div class="mt-4">
-                    <a href="/dashboardCliente/index.html" class="btn btn-outline-dark btn-lg" target="_blank">🌐 Ver Menú Público del Cliente</a>
+    <div class="container mt-4">
+        <div class="p-4 mb-4 bg-white rounded-3 shadow-sm border-start border-4 border-success">
+            <div class="d-flex justify-content-between align-items-center flex-wrap">
+                <div>
+                    <h1 class="h3 fw-bold text-success mb-1">Panel de Administración y BI</h1>
+                    <p class="text-muted mb-0">Bienvenido al sistema de gestión interna de la pastelería artesanal.</p>
+                </div>
+                <div class="mt-2 mt-md-0">
+                    <a href="/dashboardCliente/index.html" class="btn btn-outline-dark" target="_blank">🌐 Ver Menú Cliente</a>
                 </div>
             </div>
+        </div>
+
+        <!-- Tarjetas KPI de Resumen -->
+        <div class="row mb-4">
+            <div class="col-md-4 mb-3 mb-md-0">
+                <div class="card text-white bg-primary shadow-sm h-100">
+                    <div class="card-body">
+                        <h6 class="card-title text-white-50 text-uppercase fw-bold">Ventas Totales (Mes)</h6>
+                        <h2 id="kpiIngresos" class="fw-bold mb-0">$0.00</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3 mb-md-0">
+                <div class="card text-white bg-success shadow-sm h-100">
+                    <div class="card-body">
+                        <h6 class="card-title text-white-50 text-uppercase fw-bold">Pedidos Pendientes</h6>
+                        <h2 id="kpiPedidos" class="fw-bold mb-0">0</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-white bg-warning shadow-sm h-100">
+                    <div class="card-body">
+                        <h6 class="card-title text-white-50 text-uppercase fw-bold">Alertas de Stock Insumos</h6>
+                        <h2 id="kpiStockBajo" class="fw-bold mb-0">0</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sección del Gráfico -->
+        <div class="card shadow p-4 mb-4 bg-white rounded">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
+                <h5 class="fw-bold m-0 text-dark">📊 Consumo y Ventas por Producto</h5>
+                <!-- Selector de filtro rápido -->
+                <select id="filtroGrafico" class="form-select w-auto mt-2 mt-sm-0">
+                    <option value="cantidad">Unidades Vendidas</option>
+                    <option value="ingresos">Ingresos Generados ($)</option>
+                </select>
+            </div>
+            <div style="position: relative; height: 350px; width: 100%;">
+                <canvas id="graficoVentasProductos"></canvas>
+            </div>
+        </div>
+
+        <!-- 🌟 NUEVA SECCIÓN: Tabla de Actividad Reciente -->
+        <div class="card shadow p-4 mb-4 bg-white rounded">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold m-0 text-dark">🕒 Actividad Reciente (Últimos Pedidos)</h5>
+                <a href="../pedidos/index.html" class="btn btn-sm btn-outline-success">Ver todos los pedidos</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th># ID</th>
+                            <th>Cliente</th>
+                            <th>Total</th>
+                            <th>Estado</th>
+                            <th>Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaActividadBody">
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-3">Cargando actividad reciente...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sección de Gestión de Sorteos (Marketing) -->
+    <div class="container mb-5">
+        <div class="card shadow p-4 bg-white rounded">
+            <h5 class="fw-bold mb-3 text-dark">🎁 Módulo de Sorteos y Promociones</h5>
+            <form id="formSorteo">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Título del Sorteo</label>
+                        <input type="text" id="sorteoTitulo" class="form-control" placeholder="Ej. ¡Sorteo de Pascuas!" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Enlace de Destino (Instagram / Formulario)</label>
+                        <input type="url" id="sorteoEnlace" class="form-control" placeholder="https://instagram.com/p/..." required>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Descripción corta</label>
+                    <textarea id="sorteoDesc" class="form-control" rows="2" placeholder="Participa etiquetando a un amigo..."></textarea>
+                </div>
+                <div class="d-flex justify-content-between align-items-center flex-wrap">
+                    <div class="form-check form-switch fs-5">
+                        <input class="form-check-input" type="checkbox" id="sorteoActivo" style="cursor: pointer;">
+                        <label class="form-check-label fw-bold text-success" for="sorteoActivo" id="labelEstadoSorteo">Sorteo Inactivo</label>
+                    </div>
+                    <button type="submit" class="btn btn-success px-4">Guardar y Actualizar Sorteo</button>
+                </div>
+            </form>
         </div>
     </div>
 
     <!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        const API = 'http://localhost:3000/api';
+        let miGrafico = null;
+        let datosEstadisticasCache = [];
+
+        function obtenerHeaders() {
+            const token = localStorage.getItem('token');
+            return {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            };
+        }
+
         // Carga automática del Header común
         fetch('../partials/header.html')
             .then(res => res.text())
@@ -48,6 +158,214 @@
                 const headerContainer = document.getElementById('header-container');
                 if (headerContainer) headerContainer.innerHTML = data;
             });
+
+        // 🌟 Cargar datos completos del Dashboard BI
+        async function cargarEstadisticasDashboard() {
+            try {
+                const res = await fetch(`${API}/estadisticas/ventas-productos`, {
+                    headers: obtenerHeaders(),
+                    credentials: 'include'
+                });
+
+                if (!res.ok) {
+                    console.error("Error en la respuesta del backend:", res.statusText);
+                    return;
+                }
+
+                const data = await res.json();
+                
+                // 1. Actualizar Tarjetas KPI
+                actualizarKPIs(data.kpis);
+
+                // 2. Guardar datos en caché y renderizar gráfico
+                datosEstadisticasCache = data.productosGrafico || [];
+                renderizarGrafico('cantidad');
+
+                // 3. Renderizar Tabla de Actividad Reciente
+                renderizarActividadReciente(data.actividadReciente || []);
+
+            } catch (err) {
+                console.error('Error al cargar estadísticas del dashboard:', err);
+            }
+        }
+
+        // 🌟 Actualizar los valores de las Tarjetas KPI
+        function actualizarKPIs(kpis) {
+            const kpiIngresos = document.getElementById('kpiIngresos');
+            const kpiPedidos = document.getElementById('kpiPedidos');
+            const kpiStockBajo = document.getElementById('kpiStockBajo');
+
+            if (kpiIngresos) kpiIngresos.innerText = `$${(kpis.ventasMes || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+            if (kpiPedidos) kpiPedidos.innerText = kpis.pedidosPendientes || 0;
+            if (kpiStockBajo) kpiStockBajo.innerText = kpis.stockBajo || 0;
+        }
+
+        // 🌟 Renderizar Tabla de Actividad Reciente
+        function renderizarActividadReciente(pedidos) {
+            const tbody = document.getElementById('tablaActividadBody');
+            if (!tbody) return;
+
+            if (pedidos.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3">No hay actividad reciente registrada.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = pedidos.map(p => {
+                let badgeClass = 'bg-secondary';
+                const est = (p.estado || '').toLowerCase();
+                if (est.includes('pendiente')) badgeClass = 'bg-warning text-dark';
+                else if (est.includes('preparacion') || est.includes('proceso')) badgeClass = 'bg-info text-dark';
+                else if (est.includes('entregado')) badgeClass = 'bg-success';
+                else if (est.includes('cancelado')) badgeClass = 'bg-danger';
+
+                const fechaFormateada = new Date(p.fecha_pedido).toLocaleString('es-AR', {
+                    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                });
+
+                return `
+                    <tr>
+                        <td class="fw-bold">#${p.id_pedido}</td>
+                        <td>${p.cliente}</td>
+                        <td class="fw-bold text-success">$${parseFloat(p.total).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                        <td><span class="badge ${badgeClass}">${p.estado}</span></td>
+                        <td class="text-muted small">${fechaFormateada}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // 🌟 Función para dibujar/actualizar el gráfico Chart.js
+        function renderizarGrafico(criterio = 'cantidad') {
+            const ctx = document.getElementById('graficoVentasProductos');
+            if (!ctx) return;
+
+            const labels = datosEstadisticasCache.map(item => item.nombre_producto);
+            const valores = datosEstadisticasCache.map(item => 
+                criterio === 'cantidad' ? parseInt(item.total_unidades) : parseFloat(item.total_ingresos)
+            );
+
+            const esCantidad = criterio === 'cantidad';
+            const labelDataset = esCantidad ? 'Unidades Vendidas' : 'Ingresos ($)';
+            const bgColor = esCantidad ? 'rgba(25, 135, 84, 0.75)' : 'rgba(13, 110, 253, 0.75)';
+            const borderColor = esCantidad ? 'rgba(25, 135, 84, 1)' : 'rgba(13, 110, 253, 1)';
+
+            if (miGrafico) miGrafico.destroy();
+
+            miGrafico = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: labelDataset,
+                        data: valores,
+                        backgroundColor: bgColor,
+                        borderColor: borderColor,
+                        borderWidth: 1.5,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true, position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let val = context.raw;
+                                    return esCantidad ? ` ${val} unidades` : ` $${val.toLocaleString('es-AR')}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return esCantidad ? value : '$' + value;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Evento al cambiar el select de filtro
+        const filtroSelect = document.getElementById('filtroGrafico');
+        if (filtroSelect) {
+            filtroSelect.addEventListener('change', (e) => {
+                renderizarGrafico(e.target.value);
+            });
+        }
+
+        // Cargar datos actuales del sorteo al iniciar el Admin
+        async function cargarConfigSorteo() {
+            try {
+                const res = await fetch(`${API}/sorteos`);
+                const data = await res.json();
+                if (data) {
+                    document.getElementById('sorteoTitulo').value = data.titulo || '';
+                    document.getElementById('sorteoEnlace').value = data.enlace_instagram || '';
+                    document.getElementById('sorteoDesc').value = data.descripcion || '';
+                    const activoChk = document.getElementById('sorteoActivo');
+                    activoChk.checked = data.activo;
+                    actualizarTextoEstado(data.activo);
+                }
+            } catch (err) {
+                console.error("Error al cargar configuración del sorteo:", err);
+            }
+        }
+
+        const checkboxSorteo = document.getElementById('sorteoActivo');
+        if (checkboxSorteo) {
+            checkboxSorteo.addEventListener('change', (e) => {
+                actualizarTextoEstado(e.target.checked);
+            });
+        }
+
+        function actualizarTextoEstado(activo) {
+            const lbl = document.getElementById('labelEstadoSorteo');
+            if (lbl) {
+                lbl.innerText = activo ? '🟢 Sorteo Activo (Visible para Clientes)' : '🔴 Sorteo Inactivo';
+                lbl.className = `form-check-label fw-bold ${activo ? 'text-success' : 'text-danger'}`;
+            }
+        }
+
+        // Guardar cambios del sorteo
+        const formSorteo = document.getElementById('formSorteo');
+        if (formSorteo) {
+            formSorteo.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const payload = {
+                    titulo: document.getElementById('sorteoTitulo',).value,
+                    enlace_instagram: document.getElementById('sorteoEnlace').value,
+                    descripcion: document.getElementById('sorteoDesc').value,
+                    activo: document.getElementById('sorteoActivo').checked
+                };
+
+                try {
+                    const res = await fetch(`${API}/sorteos`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        alert('¡Sorteo actualizado con éxito!');
+                    } else {
+                        alert(data.error || 'Error al guardar el sorteo');
+                    }
+                } catch (err) {
+                    console.error('Error al enviar sorteo:', err);
+                }
+            });
+        }
+
+        // Inicializar al cargar la página
+        cargarConfigSorteo();
+        cargarEstadisticasDashboard();
     </script>
 </body>
 </html>

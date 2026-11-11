@@ -4,34 +4,64 @@ const { enviarCorreoConLog } = require('../services/emailService');
 
 const crearPedido = async (req, res) => {
     const client = await pool.connect();
+
     
     try {
         await client.query('BEGIN');
-
-        // Extraemos los datos del body
-        const { id_cliente, monto_subtotal, monto_descuento, monto_final, canal_notificacion, metodo_pago, items } = req.body;
         
-        // 🌟 Si Multer procesó un archivo, usamos su nombre único en el servidor
+        // 1. Extraer datos del body (enviados por FormData)
+        const { id_cliente, monto_subtotal, monto_descuento, monto_final, canal_notificacion, metodo_pago, items } = req.body;
+
+        // Validacion de si el cliente ya tiene un pedido activo (que no esté Entregado ni Cancelado)
+        const pedidoActivoRes = await client.query(`
+            SELECT id_pedido, codigo_unico 
+            FROM pedidos 
+            WHERE id_cliente = $1 
+            AND LOWER(estado_pedido) NOT IN ('entregado', 'cancelado')
+            LIMIT 1;
+        `, [id_cliente]);
+        if (pedidoActivoRes.rows.length > 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ 
+                error: `Ya tienes un pedido activo en curso (Código: #${pedidoActivoRes.rows[0].codigo_unico}). Debes esperar a que sea entregado para realizar uno nuevo.` 
+            });
+        }
+        
+        // 2. Archivo de comprobante gestionado por Multer
         const comprobante_pago = req.file ? req.file.filename : null;
 
-        // El resto de tu lógica de cálculo de descuentos...
+        // 3. Parsear los ítems que vienen como string JSON desde el FormData
+        let productosArray = [];
+        try {
+            productosArray = typeof items === 'string' ? JSON.parse(items) : items;
+        } catch (e) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'El formato de los ítems del carrito es inválido.' });
+        }
+
+        if (!productosArray || productosArray.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'El carrito está vacío o no se enviaron productos.' });
+        }
+
+        // 4. Verificar descuento de frecuencia del cliente
         const clienteRes = await client.query('SELECT pedidos_completados FROM clientes WHERE id_cliente = $1', [id_cliente]);
         const pedidosCompletados = clienteRes.rows.length > 0 ? clienteRes.rows[0].pedidos_completados : 0;
         
         const aplicaDescuentoFrecuencia = (pedidosCompletados > 0 && pedidosCompletados % 4 === 3);
 
-        let descuentoFinal = monto_descuento || 0;
-        let finalMonto = monto_final;
+        const subtotalNum = parseFloat(monto_subtotal);
+        let descuentoFinal = parseFloat(monto_descuento) || 0;
 
-        if (aplicaDescuentoFrecuencia) {
-            const descuentoExtra = monto_subtotal * 0.15;
-            descuentoFinal += descuentoExtra;
-            finalMonto = monto_subtotal - descuentoFinal;
+        // Si le toca descuento por frecuencia y no se había aplicado, lo sumamos
+        if (aplicaDescuentoFrecuencia && descuentoFinal === 0) {
+            descuentoFinal = subtotalNum * 0.15;
         }
 
+        const finalMonto = subtotalNum - descuentoFinal;
         const codigo_unico = 'PED-' + Math.floor(100000 + Math.random() * 900000);
 
-        // Insertar pedido... (mantiene tu estructura actual)
+        // 5. Insertar el pedido principal
         const queryPedido = `
             INSERT INTO pedidos (codigo_unico, id_cliente, estado_pedido, monto_subtotal, monto_descuento, monto_final, canal_notificacion, pago_confirmado, metodo_pago, comprobante_pago)
             VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8, $9)
@@ -41,18 +71,42 @@ const crearPedido = async (req, res) => {
             codigo_unico, 
             id_cliente, 
             'Pendiente', 
-            monto_subtotal, 
+            subtotalNum, 
             descuentoFinal, 
             finalMonto, 
             canal_notificacion || 'WhatsApp',
-            metodo_pago || 'Efectivo',
-            comprobante_pago // 👈 Guardamos el nombre del archivo gestionado por Multer
+            metodo_pago || 'Transferencia Bancaria',
+            comprobante_pago
         ];
         
         const resPedido = await client.query(queryPedido, valoresPedido);
         const id_pedido = resPedido.rows[0].id_pedido;
 
-        // ... (tu ciclo de inserción de ítems y opciones se queda igual) ...
+        // 6. Insertar los ítems del detalle del pedido y sus opciones/toppings
+        for (const item of productosArray) {
+            // Tomamos el precio ya sea que venga como precio_unitario o precio
+            const precioUnitario = item.precio_unitario !== undefined ? item.precio_unitario : item.precio;
+
+            const queryDetalle = `
+                INSERT INTO detalle_pedidos (id_pedido, id_producto, cantidad, precio_unitario)
+                VALUES ($1, $2, $3, $4)
+                RETURNING id_detalle;
+            `;
+            const valoresDetalle = [id_pedido, item.id_producto, item.cantidad, precioUnitario];
+            const resDetalle = await client.query(queryDetalle, valoresDetalle);
+            const id_detalle = resDetalle.rows[0].id_detalle;
+
+            // Si el producto tiene opciones o toppings seleccionados, los guardamos
+            if (item.opciones && item.opciones.length > 0) {
+                for (const op of item.opciones) {
+                    const queryOpcion = `
+                        INSERT INTO detalle_opciones (id_detalle, tipo_opcion, nombre_opcion, costo_adicional)
+                        VALUES ($1, $2, $3, $4);
+                    `;
+                    await client.query(queryOpcion, [id_detalle, op.tipo_opcion || 'Topping', op.nombre_opcion, op.costo_adicional || 0]);
+                }
+            }
+        }
 
         await client.query('COMMIT');
         res.status(201).json({ 
@@ -61,8 +115,6 @@ const crearPedido = async (req, res) => {
             codigo_unico,
             descuento_aplicado: aplicaDescuentoFrecuencia
         });
-
-        // Disparar correos... (sin cambios)
 
     } catch (err) {
         await client.query('ROLLBACK');
@@ -157,7 +209,7 @@ const actualizarEstadoPedido = async (req, res) => {
     }
 };
 
-// Verificar o rechazar el pago de un pedido
+// Verificar o rechazar el pago de un pedido y descontar stock de insumos por receta (escandallo)
 const verificarPagoPedido = async (req, res) => {
     const client = await pool.connect();
     try {
@@ -166,25 +218,83 @@ const verificarPagoPedido = async (req, res) => {
         const { id } = req.params;
         const { pago_confirmado, motivo_error } = req.body; // pago_confirmado: true/false
 
-        // 1. Actualizar el estado de confirmación del pago en la base de datos
-        const query = `
+        // 1. Obtener el estado actual del pedido para verificar si ya estaba confirmado antes
+        const pedidoAnteriorRes = await client.query('SELECT pago_confirmado, estado_pedido FROM pedidos WHERE id_pedido = $1', [id]);
+        if (pedidoAnteriorRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Pedido no encontrado' });
+        }
+
+        const yaEstabaConfirmado = pedidoAnteriorRes.rows[0].pago_confirmado;
+
+        // 2. Actualizar el estado de confirmación del pago en la base de datos
+        const queryUpdate = `
             UPDATE pedidos 
             SET pago_confirmado = $1 
             WHERE id_pedido = $2 
             RETURNING *;
         `;
-        const { rows } = await client.query(query, [pago_confirmado, id]);
-        if (rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.status(404).json({ error: 'Pedido no encontrado' });
-        }
-
+        const { rows } = await client.query(queryUpdate, [pago_confirmado, id]);
         const pedidoActualizado = rows[0];
 
-        await client.query('COMMIT');
-        res.json({ message: 'Estado de pago actualizado con éxito', pedido: pedidoActualizado });
+        // 🌟 3. DESCUENTO AUTOMÁTICO DE STOCK (Escandallo)
+        // Solo descontamos si el pago pasa a ser confirmado AHORA (y antes no lo estaba)
+        if (pago_confirmado === true && !yaEstabaConfirmado) {
+            
+            // A. Consultar los insumos necesarios basándonos en los productos del pedido y sus recetas
+            const queryInsumosNecesarios = `
+                SELECT 
+                    er.id_insumo,
+                    er.cantidad_requerida,
+                    dp.cantidad AS cantidad_producto,
+                    i.stock_actual,
+                    i.nombre_insumo
+                FROM detalle_pedidos dp
+                JOIN escandallo_recetas er ON dp.id_producto = er.id_producto
+                JOIN insumos i ON er.id_insumo = i.id_insumo
+                WHERE dp.id_pedido = $1;
+            `;
+            const insumosRes = await client.query(queryInsumosNecesarios, [id]);
 
-        // 2. Enviar correo automático al cliente según la decisión del Admin
+            // B. Agrupar y calcular el total a descontar por cada insumo único
+            const consumosMap = {};
+            for (const item of insumosRes.rows) {
+                const totalNecesario = Number(item.cantidad_requerida) * Number(item.cantidad_producto);
+                if (!consumosMap[item.id_insumo]) {
+                    consumosMap[item.id_insumo] = {
+                        nombre: item.nombre_insumo,
+                        stockActual: Number(item.stock_actual),
+                        totalARestar: 0
+                    };
+                }
+                consumosMap[item.id_insumo].totalARestar += totalNecesario;
+            }
+
+            // C. Validar stock suficiente antes de descontar (Opcional pero muy recomendado para tesis)
+            for (const [idInsumo, datos] of Object.entries(consumosMap)) {
+                if (datos.stockActual < datos.totalARestar) {
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({ 
+                        error: `Stock insuficiente del insumo "${datos.nombre}". Stock actual: ${datos.stockActual}, requerido: ${datos.totalARestar}.` 
+                    });
+                }
+            }
+
+            // D. Ejecutar la sentencia UPDATE para restar stock en la tabla insumos
+            for (const [idInsumo, datos] of Object.entries(consumosMap)) {
+                const queryDescontarStock = `
+                    UPDATE insumos 
+                    SET stock_actual = stock_actual - $1 
+                    WHERE id_insumo = $2;
+                `;
+                await client.query(queryDescontarStock, [datos.totalARestar, idInsumo]);
+            }
+        }
+
+        await client.query('COMMIT');
+        res.json({ message: 'Estado de pago actualizado y stock descontado con éxito', pedido: pedidoActualizado });
+
+        // 4. Enviar correo automático al cliente según la decisión del Admin (fuera de la transacción principal)
         const clienteRes = await pool.query(
             'SELECT c.email, c.nombre_completo, p.codigo_unico FROM pedidos p JOIN clientes c ON p.id_cliente = c.id_cliente WHERE p.id_pedido = $1',
             [id]
@@ -194,7 +304,6 @@ const verificarPagoPedido = async (req, res) => {
             const { email, nombre_completo, codigo_unico } = clienteRes.rows[0];
 
             if (pago_confirmado) {
-                // Correo de éxito / pago verificado
                 const htmlExito = `
                     <h3>¡Hola, ${nombre_completo}! 🎉</h3>
                     <p>Te informamos que el pago de tu pedido <strong>#${codigo_unico}</strong> ha sido <strong>verificado y confirmado</strong> con éxito.</p>
@@ -202,7 +311,6 @@ const verificarPagoPedido = async (req, res) => {
                 `;
                 enviarCorreoConLog(id, email, `Pago Confirmado - Pedido #${codigo_unico}`, htmlExito);
             } else {
-                // Correo de error en el pago / comprobante inválido
                 const htmlError = `
                     <h3>Hola, ${nombre_completo} ⚠️</h3>
                     <p>Hubo un inconveniente con el pago o comprobante de tu pedido <strong>#${codigo_unico}</strong>.</p>
@@ -215,7 +323,7 @@ const verificarPagoPedido = async (req, res) => {
 
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error("Error al verificar pago:", error);
+        console.error("Error al verificar pago y descontar stock:", error);
         res.status(500).json({ error: 'Error en el servidor al verificar el pago' });
     } finally {
         client.release();

@@ -29,12 +29,25 @@ const createProducto = async (req, res) => {
   try {
     const { nombre_producto, id_categoria, precio_base, descripcion } = req.body;
 
-    // Verificar que la categoría esté activa antes de permitir la creación
+    // 🌟 1. Validar duplicidad de producto (ignorando mayúsculas/minúsculas y espacios extra)
+    const duplicadoCheck = await db.query(
+      'SELECT id_producto FROM productos WHERE LOWER(TRIM(nombre_producto)) = LOWER(TRIM($1));',
+      [nombre_producto]
+    );
+
+    if (duplicadoCheck.rows.length > 0) {
+      return res.status(400).json({ 
+        error: `Ya existe un producto registrado con el nombre "${nombre_producto}". Por favor, elija otro nombre o edite el existente.` 
+      });
+    }
+
+    // 2. Verificar que la categoría esté activa antes de permitir la creación
     const catCheck = await db.query('SELECT activo FROM categorias WHERE id_categoria = $1;', [id_categoria]);
     if (catCheck.rows.length === 0 || !catCheck.rows[0].activo) {
       return res.status(400).json({ error: 'No se puede asociar el producto a una categoría inactiva o inexistente.' });
     }
 
+    // 3. Insertar el nuevo producto
     const query = `
       INSERT INTO productos (nombre_producto, id_categoria, precio_base, descripcion) 
       VALUES ($1, $2, $3, $4) RETURNING *;
@@ -52,11 +65,25 @@ const updateProducto = async (req, res) => {
     const { id } = req.params;
     const { nombre_producto, id_categoria, precio_base, descripcion } = req.body;
 
+    // 🌟 1. Validar duplicidad al actualizar (excluyendo el producto actual que se está editando)
+    const duplicadoCheck = await db.query(
+      'SELECT id_producto FROM productos WHERE LOWER(TRIM(nombre_producto)) = LOWER(TRIM($1)) AND id_producto != $2;',
+      [nombre_producto, id]
+    );
+
+    if (duplicadoCheck.rows.length > 0) {
+      return res.status(400).json({ 
+        error: `Ya existe otro producto registrado con el nombre "${nombre_producto}".` 
+      });
+    }
+
+    // 2. Verificar categoría activa
     const catCheck = await db.query('SELECT activo FROM categorias WHERE id_categoria = $1;', [id_categoria]);
     if (catCheck.rows.length === 0 || !catCheck.rows[0].activo) {
       return res.status(400).json({ error: 'La categoría seleccionada no está activa.' });
     }
 
+    // 3. Actualizar el producto
     const query = `
       UPDATE productos 
       SET nombre_producto = $1, id_categoria = $2, precio_base = $3, descripcion = $4 
@@ -73,7 +100,6 @@ const updateProducto = async (req, res) => {
 const deleteProducto = async (req, res) => {
   try {
     const { id } = req.params;
-    // Opcional: verificar si está en algún pedido antes de eliminar
     await db.query('DELETE FROM productos WHERE id_producto = $1;', [id]);
     res.json({ message: 'Producto eliminado correctamente' });
   } catch (error) {
@@ -82,7 +108,6 @@ const deleteProducto = async (req, res) => {
   }
 };
 
-// Historial de pedidos / uso de este producto (Verificar)
 const getPedidosByProducto = async (req, res) => {
   try {
     const { id } = req.params;

@@ -10,7 +10,9 @@ const escandalloRoutes = require('./src/routes/escandallo');
 const clientesRoutes = require('./src/routes/clientes');     
 const rolesRoutes = require('./src/routes/roles');           
 const usuariosRoutes = require('./src/routes/usuarios');         
-const pedidosRoutes = require('./src/routes/pedidos');         
+const pedidosRoutes = require('./src/routes/pedidos');    
+const estadisticasRoutes = require('./src/routes/estadisticas');    
+const sorteosRoutes = require('./src/routes/sorteos');
 
 const app = express();
 
@@ -35,6 +37,8 @@ app.use('/api/productos', productosRoutes);
 app.use('/api/escandallo', escandalloRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/pedidos', pedidosRoutes);
+app.use('/api/estadisticas', estadisticasRoutes); // Asegúrate de importar estadisticasRoutes al inicio del archivo);
+app.use('/api/sorteos', sorteosRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
