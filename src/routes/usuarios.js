@@ -7,14 +7,16 @@ const {
     actualizarUsuario, 
     cambiarEstadoUsuario,
     loginUsuario,
-    registrarCliente 
+    registrarCliente,
+    eliminarUsuario // 👈 Asegúrate de incluir esta importación
 } = require('../controllers/usuariosController');
 
-// Rutas libres de middleware para que el panel pueda operar sin bloqueos 401
+// Rutas de la API de usuarios
 router.get('/', obtenerUsuarios);
 router.post('/', crearUsuario);
 router.put('/:id', actualizarUsuario);
 router.patch('/:id/estado', cambiarEstadoUsuario);
+router.delete('/:id', eliminarUsuario); // 👈 Usar 'router' en lugar de 'rou'
 router.post('/login', loginUsuario);
 router.post('/registro', registrarCliente);
 

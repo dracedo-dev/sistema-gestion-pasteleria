@@ -6,10 +6,7 @@
     <title>Gestión de Usuarios - Admin Pastelería</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script>
-        // 1. Obtener la sesión guardada
         const usuarioGuardado = JSON.parse(localStorage.getItem('usuarioLogueado'));
-
-        // 2. Verificar si no existe usuario O si el usuario NO es Administrador
         if (!usuarioGuardado || !usuarioGuardado.nombre_rol || usuarioGuardado.nombre_rol.toLowerCase() !== 'administrador') {
             window.location.href = '../login.html'; 
         }
@@ -17,21 +14,34 @@
 </head>
 <body class="bg-light">
 
-    <!-- Header Compartido -->
     <div id="header-container"></div>
 
     <div class="container mt-4">
         <h2 class="mb-4">Gestión de Usuarios</h2>
 
         <div class="card shadow p-4 mb-4 bg-white rounded">
-            <div class="row mb-3">
-                <div class="col-md-8">
+            <!-- 🌟 FILTROS Y BUSCADOR -->
+            <div class="row mb-3 g-2">
+                <div class="col-md-5">
                     <input type="text" id="searchUsuario" class="form-control" placeholder="Buscar por nombre o email...">
                 </div>
-                <div class="col-md-4 text-end">
-                    <button class="btn btn-success w-100" onclick="abrirModalUsuario()">+ Nuevo Usuario</button>
+                <div class="col-md-3">
+                    <select id="filtroRol" class="form-select">
+                        <option value="">Filtrar por Rol...</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select id="filtroEstado" class="form-select">
+                        <option value="">Estados...</option>
+                        <option value="activo">Activos</option>
+                        <option value="inactivo">Inactivos</option>
+                    </select>
+                </div>
+                <div class="col-md-2 text-end">
+                    <button class="btn btn-success w-100" onclick="abrirModalUsuario()">+ Nuevo</button>
                 </div>
             </div>
+
             <table class="table table-hover align-middle">
                 <thead class="table-dark">
                     <tr>
@@ -46,12 +56,9 @@
                 <tbody id="tablaUsuarios"></tbody>
             </table>
 
-            <!-- 🌟 CONTENEDOR DE PAGINACIÓN -->
             <nav class="d-flex justify-content-between align-items-center mt-3" aria-label="Navegación de usuarios">
                 <span id="infoPaginacion" class="text-muted small">Mostrando registros...</span>
-                <ul class="pagination mb-0" id="paginacionUsuarios">
-                    <!-- Se genera dinámicamente vía JS -->
-                </ul>
+                <ul class="pagination mb-0" id="paginacionUsuarios"></ul>
             </nav>
         </div>
     </div>
@@ -79,11 +86,10 @@
                             <label class="form-label">Rol Asignado *</label>
                             <select id="usrRol" class="form-select" required></select>
                         </div>
-                        <!-- Campo de contraseña dinámico para roles administrativos -->
                         <div class="mb-3 d-none" id="divPasswordAdmin">
                             <label class="form-label">Contraseña de Acceso *</label>
                             <input type="password" id="usrPassword" class="form-control" placeholder="Contraseña para el panel">
-                            <div class="form-text">Esta contraseña será requerida para que el administrador inicie sesión.</div>
+                            <div class="form-text">Esta contraseña será requerida para que el usuario inicie sesión.</div>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -95,18 +101,14 @@
         </div>
     </div>
 
-    <!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const API = 'http://localhost:3000/api';
         let listaUsuariosCache = [];
         let usuariosFiltradosCache = [];
-        
-        // 🌟 Variables de Paginación
         let paginaActual = 1;
-        const elementosPorPagina = 5; // Puedes cambiarlo a 8 o 10 según prefieras
+        const elementosPorPagina = 5;
 
-        // Función auxiliar para incluir la autenticación en cada petición
         function obtenerHeaders() {
             const token = localStorage.getItem('token');
             return {
@@ -115,7 +117,6 @@
             };
         }
 
-        // Cargar Header Compartido
         fetch('../partials/header.html')
             .then(res => res.text())
             .then(data => {
@@ -123,23 +124,27 @@
                 if (headerContainer) headerContainer.innerHTML = data;
             });
 
-        // Cargar roles en el select del modal
-        async function cargarRolesEnSelect(idRolSeleccionado = null) {
+        async function cargarRolesEnSelects() {
             try {
-                const res = await fetch(`${API}/roles`, {
-                    headers: obtenerHeaders(),
-                    credentials: 'include'
-                });
+                const res = await fetch(`${API}/roles`, { headers: obtenerHeaders(), credentials: 'include' });
                 const roles = await res.json();
-                const select = document.getElementById('usrRol');
-                if (select) {
-                    select.innerHTML = `<option value="">Seleccione un rol...</option>` +
-                        roles.map(r => `<option value="${r.id_rol}" ${r.id_rol === idRolSeleccionado ? 'selected' : ''}>${r.nombre_rol}</option>`).join('');
+                
+                // Select del modal
+                const selectModal = document.getElementById('usrRol');
+                if (selectModal) {
+                    selectModal.innerHTML = `<option value="">Seleccione un rol...</option>` +
+                        roles.map(r => `<option value="${r.id_rol}">${r.nombre_rol}</option>`).join('');
+                }
+
+                // Select del filtro superior
+                const selectFiltro = document.getElementById('filtroRol');
+                if (selectFiltro) {
+                    selectFiltro.innerHTML = `<option value="">Todos los roles</option>` +
+                        roles.map(r => `<option value="${r.nombre_rol.toLowerCase()}">${r.nombre_rol}</option>`).join('');
                 }
             } catch (err) { console.error('Error al cargar roles:', err); }
         }
 
-        // Abrir modal para crear
         async function abrirModalUsuario() {
             document.getElementById('formUsuario').reset();
             document.getElementById('usuarioId').value = '';
@@ -150,26 +155,41 @@
             const passInput = document.getElementById('usrPassword');
             if (passInput) passInput.required = false;
 
-            await cargarRolesEnSelect();
+            await cargarRolesEnSelects();
             const modal = new bootstrap.Modal(document.getElementById('modalUsuario'));
             modal.show();
         }
 
-        // Obtener y listar usuarios
         const cargarUsuarios = async () => {
             try {
-                const res = await fetch(`${API}/usuarios`, {
-                    headers: obtenerHeaders(),
-                    credentials: 'include'
-                });
+                const res = await fetch(`${API}/usuarios`, { headers: obtenerHeaders(), credentials: 'include' });
                 listaUsuariosCache = await res.json();
-                usuariosFiltradosCache = [...listaUsuariosCache];
-                paginaActual = 1; // Reiniciar a la primera página
-                renderizarTablaUsuarios();
+                aplicarFiltros();
             } catch (err) { console.error('Error al cargar usuarios:', err); }
         };
 
-        // 🌟 Renderizar la tabla y controles de paginación
+        // 🌟 Lógica unificada de Buscador y Filtros
+        function aplicarFiltros() {
+            const texto = document.getElementById('searchUsuario').value.toLowerCase();
+            const rolFiltro = document.getElementById('filtroRol').value.toLowerCase();
+            const estadoFiltro = document.getElementById('filtroEstado').value;
+
+            usuariosFiltradosCache = listaUsuariosCache.filter(u => {
+                const coincideTexto = u.nombre_completo.toLowerCase().includes(texto) || u.email.toLowerCase().includes(texto);
+                const rolUsuario = (u.nombre_rol || '').toLowerCase();
+                const coincideRol = !rolFiltro || rolUsuario === rolFiltro;
+                
+                let coincideEstado = true;
+                if (estadoFiltro === 'activo') coincideEstado = u.activo === true;
+                if (estadoFiltro === 'inactivo') coincideEstado = u.activo === false;
+
+                return coincideTexto && coincideRol && coincideEstado;
+            });
+
+            paginaActual = 1;
+            renderizarTablaUsuarios();
+        }
+
         const renderizarTablaUsuarios = () => {
             const tbody = document.getElementById('tablaUsuarios');
             const paginacionUl = document.getElementById('paginacionUsuarios');
@@ -183,10 +203,8 @@
                 return;
             }
 
-            // Cálculos de Paginación
             const totalRegistros = usuariosFiltradosCache.length;
             const totalPaginas = Math.ceil(totalRegistros / elementosPorPagina);
-            
             if (paginaActual > totalPaginas) paginaActual = totalPaginas;
             if (paginaActual < 1) paginaActual = 1;
 
@@ -194,12 +212,13 @@
             const fin = inicio + elementosPorPagina;
             const usuariosPaginados = usuariosFiltradosCache.slice(inicio, fin);
 
-            // Texto informativo inferior
             if (infoPaginacion) {
                 infoPaginacion.innerText = `Mostrando del ${inicio + 1} al ${Math.min(fin, totalRegistros)} de ${totalRegistros} usuarios`;
             }
 
-            // Renderizar filas de la tabla
+            // 🌟 Verificamos si el usuario logueado es Administrador supremo para mostrar el botón de eliminar
+            const esAdminTotal = usuarioGuardado && usuarioGuardado.nombre_rol.toLowerCase() === 'administrador';
+
             tbody.innerHTML = usuariosPaginados.map(u => `
                 <tr>
                     <td>${u.id_usuario}</td>
@@ -212,66 +231,45 @@
                         </button>
                     </td>
                     <td class="text-center">
-                        <button class="btn btn-sm btn-primary" title="Editar" onclick='prepararEditarUsuario(${u.id_usuario}, ${JSON.stringify(u.nombre_completo)}, ${JSON.stringify(u.email)}, ${u.id_rol})'>✏️</button>
+                        <button class="btn btn-sm btn-primary me-1" title="Editar" onclick='prepararEditarUsuario(${u.id_usuario}, ${JSON.stringify(u.nombre_completo)}, ${JSON.stringify(u.email)}, ${u.id_rol})'>✏️</button>
+                        ${esAdminTotal ? `<button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarUsuario(${u.id_usuario})">🗑️</button>` : ''}
                     </td>
                 </tr>
             `).join('');
 
-            // Renderizar Botones de Paginación Bootstrap
             if (paginacionUl) {
-                let htmlPaginacion = '';
-
-                // Botón Anterior
-                htmlPaginacion += `
-                    <li class="page-item ${paginaActual === 1 ? 'disabled' : ''}">
-                        <button class="page-link" onclick="cambiarPagina(${paginaActual - 1})">Anterior</button>
-                    </li>
-                `;
-
-                // Botones numéricos
+                let htmlPaginacion = `<li class="page-item ${paginaActual === 1 ? 'disabled' : ''}"><button class="page-link" onclick="cambiarPagina(${paginaActual - 1})">Anterior</button></li>`;
                 for (let i = 1; i <= totalPaginas; i++) {
-                    htmlPaginacion += `
-                        <li class="page-item ${paginaActual === i ? 'active' : ''}">
-                            <button class="page-link" onclick="cambiarPagina(${i})">${i}</button>
-                        </li>
-                    `;
+                    htmlPaginacion += `<li class="page-item ${paginaActual === i ? 'active' : ''}"><button class="page-link" onclick="cambiarPagina(${i})">${i}</button></li>`;
                 }
-
-                // Botón Siguiente
-                htmlPaginacion += `
-                    <li class="page-item ${paginaActual === totalPaginas ? 'disabled' : ''}">
-                        <button class="page-link" onclick="cambiarPagina(${paginaActual + 1})">Siguiente</button>
-                    </li>
-                `;
-
+                htmlPaginacion += `<li class="page-item ${paginaActual === totalPaginas ? 'disabled' : ''}"><button class="page-link" onclick="cambiarPagina(${paginaActual + 1})">Siguiente</button></li>`;
                 paginacionUl.innerHTML = htmlPaginacion;
             }
         };
 
-        // Función para cambiar de página
-        function cambiarPagina(nuevaPagina) {
-            paginaActual = nuevaPagina;
-            renderizarTablaUsuarios();
-        }
+        function cambiarPagina(p) { paginaActual = p; renderizarTablaUsuarios(); }
 
-        // Función para cambiar el estado al hacer clic en el botón de la tabla
         async function toggleEstadoUsuario(id) {
             try {
-                const res = await fetch(`${API}/usuarios/${id}/estado`, { 
-                    method: 'PATCH',
-                    headers: obtenerHeaders(),
-                    credentials: 'include'
-                });
+                const res = await fetch(`${API}/usuarios/${id}/estado`, { method: 'PATCH', headers: obtenerHeaders(), credentials: 'include' });
+                if (res.ok) cargarUsuarios();
+                else { const data = await res.json(); alert(data.error); }
+            } catch (err) { console.error(err); }
+        }
+
+        async function eliminarUsuario(id) {
+            if (!confirm('¿Estás seguro de eliminar este usuario permanentemente?')) return;
+            try {
+                const res = await fetch(`${API}/usuarios/${id}`, { method: 'DELETE', headers: obtenerHeaders(), credentials: 'include' });
+                const data = await res.json();
                 if (res.ok) {
                     cargarUsuarios();
                 } else {
-                    const data = await res.json();
-                    alert(data.error || 'Error al cambiar el estado');
+                    alert(data.error || 'Error al eliminar');
                 }
-            } catch (err) { console.error('Error:', err); }
+            } catch (err) { console.error(err); }
         }
 
-        // Preparar modal para editar
         async function prepararEditarUsuario(id, nombre, email, idRol) {
             document.getElementById('usuarioId').value = id;
             document.getElementById('usrNombre').value = nombre;
@@ -280,53 +278,36 @@
             
             const divPassword = document.getElementById('divPasswordAdmin');
             if (divPassword) divPassword.classList.add('d-none');
-            const passInput = document.getElementById('usrPassword');
-            if (passInput) {
-                passInput.required = false;
-                passInput.value = '';
-            }
 
-            await cargarRolesEnSelect(idRol);
+            await cargarRolesEnSelects();
+            document.getElementById('usrRol').value = idRol;
+            
             const modal = new bootstrap.Modal(document.getElementById('modalUsuario'));
             modal.show();
         }
 
-        // Buscador en tiempo real (reinicia a la página 1 al filtrar)
-        const searchInput = document.getElementById('searchUsuario');
-        if (searchInput) {
-            searchInput.addEventListener('input', (e) => {
-                const valor = e.target.value.toLowerCase();
-                usuariosFiltradosCache = listaUsuariosCache.filter(u => 
-                    u.nombre_completo.toLowerCase().includes(valor) || 
-                    u.email.toLowerCase().includes(valor)
-                );
-                paginaActual = 1;
-                renderizarTablaUsuarios();
-            });
-        }
+        // Eventos de Filtros y Buscador
+        document.getElementById('searchUsuario').addEventListener('input', aplicarFiltros);
+        document.getElementById('filtroRol').addEventListener('change', aplicarFiltros);
+        document.getElementById('filtroEstado').addEventListener('change', aplicarFiltros);
 
-        // Lógica condicional para mostrar contraseña según el rol seleccionado
-        const selectRol = document.getElementById('usrRol');
-        if (selectRol) {
-            selectRol.addEventListener('change', function() {
-                const textoRolSeleccionado = this.options[this.selectedIndex].text.toLowerCase();
-                const divPassword = document.getElementById('divPasswordAdmin');
-                const passInput = document.getElementById('usrPassword');
-
-                if (divPassword && passInput) {
-                    if (textoRolSeleccionado.includes('administrador') || !textoRolSeleccionado.includes('cliente')) {
-                        divPassword.classList.remove('d-none');
-                        passInput.required = true;
-                    } else {
-                        divPassword.classList.add('d-none');
-                        passInput.required = false;
-                        passInput.value = '';
-                    }
+        // Mostrar password si el rol seleccionado lo requiere (ej. Admin / Marketing)
+        document.getElementById('usrRol').addEventListener('change', function() {
+            const textoRol = this.options[this.selectedIndex].text.toLowerCase();
+            const divPassword = document.getElementById('divPasswordAdmin');
+            const passInput = document.getElementById('usrPassword');
+            if (divPassword && passInput) {
+                if (!textoRol.includes('cliente')) {
+                    divPassword.classList.remove('d-none');
+                    passInput.required = true;
+                } else {
+                    divPassword.classList.add('d-none');
+                    passInput.required = false;
+                    passInput.value = '';
                 }
-            });
-        }
+            }
+        });
 
-        // Guardar (Crear o Actualizar) unificado
         const formUsuario = document.getElementById('formUsuario');
         if (formUsuario) {
             formUsuario.onsubmit = async (e) => {
@@ -349,23 +330,16 @@
                         credentials: 'include',
                         body: JSON.stringify(datosUsuario)
                     });
-
                     const data = await res.json();
-                    if (!res.ok) {
-                        alert(data.error || 'Error al guardar');
-                        return;
-                    }
+                    if (!res.ok) { alert(data.error || 'Error al guardar'); return; }
 
-                    const modalEl = document.getElementById('modalUsuario');
-                    const modalInstance = bootstrap.Modal.getInstance(modalEl);
-                    if (modalInstance) modalInstance.hide();
-                    
+                    bootstrap.Modal.getInstance(document.getElementById('modalUsuario')).hide();
                     cargarUsuarios();
-                } catch (err) { console.error('Error al enviar formulario:', err); }
+                } catch (err) { console.error(err); }
             };
         }
 
-        // Inicializar carga al abrir la vista
+        cargarRolesEnSelects();
         cargarUsuarios();
     </script>
 </body>

@@ -186,7 +186,7 @@ const obtenerUsuarios = async (req, res) => {
 };
 
 
-// Actualizar un usuario
+// Actualizar un usuario con validación de duplicidad de email
 const actualizarUsuario = async (req, res) => {
     try {
         const { id } = req.params;
@@ -201,20 +201,24 @@ const actualizarUsuario = async (req, res) => {
         res.json({ message: 'Usuario actualizado correctamente' });
     } catch (err) {
         console.error("Error al actualizar usuario:", err);
+        if (err.code === '23505') {
+            return res.status(400).json({ error: 'El correo electrónico ya se encuentra registrado por otro usuario.' });
+        }
         res.status(500).json({ error: 'Error al actualizar el usuario' });
     }
 };
 
-// Eliminar (dar de baja lógica) un usuario
+// Eliminar (dar de baja lógica o física según prefieras, mantendremos baja lógica segura)
 const eliminarUsuario = async (req, res) => {
     try {
         const { id } = req.params;
-        const query = 'UPDATE usuarios SET activo = false WHERE id_usuario = $1';
+        // Opcional: si prefieres DELETE físico: 'DELETE FROM usuarios WHERE id_usuario = $1'
+        const query = 'DELETE FROM usuarios WHERE id_usuario = $1';
         await db.query(query, [id]);
-        res.json({ message: 'Usuario desactivado correctamente' });
+        res.json({ message: 'Usuario eliminado correctamente' });
     } catch (err) {
         console.error("Error al eliminar usuario:", err);
-        res.status(500).json({ error: 'Error al eliminar el usuario' });
+        res.status(500).json({ error: 'No se puede eliminar el usuario porque tiene registros asociados (pedidos o historial).' });
     }
 };
 
@@ -246,5 +250,6 @@ module.exports = {
     actualizarUsuario,
     cambiarEstadoUsuario,
     loginUsuario,
-    registrarCliente
+    registrarCliente,
+    eliminarUsuario
 };
