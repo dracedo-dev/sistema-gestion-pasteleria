@@ -68,4 +68,26 @@ const deleteRol = async (req, res) => {
   }
 };
 
-module.exports = { getRoles, createRol, updateRol, deleteRol };
+const getUsuariosPorRol = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const query = `
+      SELECT 
+        u.id_usuario, 
+        u.nombre_completo, 
+        u.email, 
+        u.activo,
+        c.telefono
+      FROM usuarios u
+      LEFT JOIN clientes c ON LOWER(u.email) = LOWER(c.email)
+      WHERE u.id_rol = $1;
+    `;
+    const { rows } = await db.query(query, [id]);
+    res.json(rows);
+  } catch (error) {
+    console.error("Error al obtener usuarios del rol:", error);
+    res.status(500).json({ error: 'Error al obtener los usuarios del rol' });
+  }
+};
+
+module.exports = { getRoles, createRol, updateRol, deleteRol, getUsuariosPorRol };
