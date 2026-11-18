@@ -217,8 +217,8 @@
                     <td><span class="badge bg-secondary">${p.nombre_categoria || '-'}</span></td>
                     <td>$${parseFloat(p.precio_base).toFixed(2)}</td>
                     <td>
-                        <span class="badge ${p.activo !== false ? 'bg-success' : 'bg-secondary'}">
-                            ${p.activo !== false ? 'Activo' : 'Inactivo'}
+                        <span class="badge ${p.estado_efectivo !== false ? 'bg-success' : 'bg-secondary'}" title="${p.estado_efectivo !== false ? 'Producto Activo' : 'Inactivo por categoría o por stock mínimo de insumos'}">
+                            ${p.estado_efectivo !== false ? 'Activo' : 'Inactivo'}
                         </span>
                     </td>
                     <td class="text-center">

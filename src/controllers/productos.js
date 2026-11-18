@@ -4,7 +4,16 @@ const getProductos = async (req, res) => {
   try {
     const { q } = req.query;
     let query = `
-      SELECT p.*, c.nombre_categoria 
+      SELECT p.*, c.nombre_categoria,
+             CASE 
+               WHEN c.activo = false THEN false
+               WHEN EXISTS (
+                 SELECT 1 FROM escandallo_recetas ri 
+                 JOIN insumos i ON ri.id_insumo = i.id_insumo 
+                 WHERE ri.id_producto = p.id_producto AND i.stock_actual <= i.stock_minimo
+               ) THEN false
+               ELSE p.activo
+             END AS estado_efectivo
       FROM productos p
       JOIN categorias c ON p.id_categoria = c.id_categoria
       WHERE 1=1
@@ -133,7 +142,15 @@ const getProductosPublicos = async (req, res) => {
       SELECT p.*, c.nombre_categoria 
       FROM productos p
       JOIN categorias c ON p.id_categoria = c.id_categoria
-      WHERE c.activo = true
+      WHERE c.activo = true 
+        AND p.activo = true
+        AND NOT EXISTS (
+            SELECT 1 
+            FROM escandallo_recetas ri 
+            JOIN insumos i ON ri.id_insumo = i.id_insumo 
+            WHERE ri.id_producto = p.id_producto 
+              AND i.stock_actual <= i.stock_minimo
+        )
       ORDER BY p.id_producto ASC;
     `;
     const { rows } = await db.query(query);
