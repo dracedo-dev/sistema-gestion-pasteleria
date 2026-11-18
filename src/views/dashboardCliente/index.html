@@ -152,14 +152,15 @@
 
         async function cargarCatalogoCliente() {
             try {
-                const res = await fetch(`${API}/productos`);
+                // 🌟 Cambiamos a la ruta pública que filtra solo productos activos y de categorías activas
+                const res = await fetch(`${API}/productos/publicos`);
                 const productos = await res.json();
                 
                 const contenedor = document.getElementById('catalogoProductos');
                 if (!contenedor) return;
 
                 if (productos.length === 0) {
-                    contenedor.innerHTML = `<div class="col-12 text-center text-muted">No hay productos disponibles.</div>`;
+                    contenedor.innerHTML = `<div class="col-12 text-center text-muted">No hay productos disponibles en este momento.</div>`;
                     return;
                 }
 

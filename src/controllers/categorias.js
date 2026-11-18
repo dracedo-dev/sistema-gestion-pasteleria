@@ -46,14 +46,6 @@ const updateCategoria = async (req, res) => {
     const { id } = req.params;
     const { nombre_categoria, activo } = req.body;
 
-    // Validación: Si se intenta desactivar, verificar que no tenga productos asociados
-    if (activo === false) {
-      const prodCheck = await db.query('SELECT COUNT(*) FROM productos WHERE id_categoria = $1;', [id]);
-      if (parseInt(prodCheck.rows[0].count) > 0) {
-        return res.status(400).json({ error: 'No se puede inactivar la categoría porque tiene productos asociados.' });
-      }
-    }
-
     const query = 'UPDATE categorias SET nombre_categoria = $1, activo = $2 WHERE id_categoria = $3 RETURNING *;';
     const { rows } = await db.query(query, [nombre_categoria, activo, id]);
     res.json(rows[0]);
@@ -97,4 +89,16 @@ const getProductosByCategoria = async (req, res) => {
   }
 };
 
-module.exports = { getCategorias, createCategoria, updateCategoria, deleteCategoria, getProductosByCategoria };
+// NUEVO: Obtener solo categorías activas para el menú del cliente
+const getCategoriasPublicas = async (req, res) => {
+  try {
+    const query = 'SELECT * FROM categorias WHERE activo = true ORDER BY nombre_categoria ASC;';
+    const { rows } = await db.query(query);
+    res.json(rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al obtener categorías públicas' });
+  }
+};
+
+module.exports = { getCategorias, createCategoria, updateCategoria, deleteCategoria, getProductosByCategoria, getCategoriasPublicas };

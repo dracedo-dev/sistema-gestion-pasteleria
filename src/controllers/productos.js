@@ -126,4 +126,22 @@ const getPedidosByProducto = async (req, res) => {
   }
 };
 
-module.exports = { getProductos, createProducto, updateProducto, deleteProducto, getPedidosByProducto };
+// NUEVO: Obtener solo productos activos y de categorías activas para el cliente
+const getProductosPublicos = async (req, res) => {
+  try {
+    const query = `
+      SELECT p.*, c.nombre_categoria 
+      FROM productos p
+      JOIN categorias c ON p.id_categoria = c.id_categoria
+      WHERE c.activo = true
+      ORDER BY p.id_producto ASC;
+    `;
+    const { rows } = await db.query(query);
+    res.json(rows);
+  } catch (error) {
+    console.error("Error al obtener productos públicos:", error);
+    res.status(500).json({ error: 'Error al obtener productos' });
+  }
+};
+
+module.exports = { getProductos, createProducto, updateProducto, deleteProducto, getPedidosByProducto, getProductosPublicos };
