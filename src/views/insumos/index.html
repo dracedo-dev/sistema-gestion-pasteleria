@@ -226,8 +226,13 @@
             const tbody = document.getElementById('tablaInsumos');
             if (!tbody) return;
 
+            // Verificamos si el usuario actual es Control de Stock para restringir la eliminación
+            const usuarioActual = JSON.parse(localStorage.getItem('usuarioLogueado')) || {};
+            const rolUser = (usuarioActual.nombre_rol || '').toLowerCase().trim();
+            const esStock = rolUser === 'control de stock';
+
             if (datosPagina.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No se encontraron insumos.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">No se encontraron insumos.</td></tr>`;
                 const pagUl = document.getElementById('paginationInsumos');
                 if (pagUl) pagUl.innerHTML = '';
                 return;
@@ -246,7 +251,7 @@
                     </td>
                     <td class="text-center">
                         <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarInsumo(${i.id_insumo}, '${i.nombre_insumo}', '${i.unidad_medida}', ${i.stock_actual}, ${i.stock_minimo}, ${i.costo_unitario}, ${i.es_topping})">✏️</button>
-                        <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarInsumo(${i.id_insumo})">🗑️</button>
+                        ${!esStock ? `<button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarInsumo(${i.id_insumo})">🗑️</button>` : ''}
                     </td>
                 </tr>
             `).join('');

@@ -273,6 +273,11 @@
 
         async function cargarInsumosDeRecetaActual(idProducto) {
             try {
+                // Verificamos si el usuario actual es Control de Stock
+                const usuarioActual = JSON.parse(localStorage.getItem('usuarioLogueado')) || {};
+                const rolUser = (usuarioActual.nombre_rol || '').toLowerCase().trim();
+                const esStock = rolUser === 'control de stock';
+
                 const res = await fetch(`${API}/escandallo`, {
                     headers: obtenerHeaders(),
                     credentials: 'include'
@@ -294,7 +299,7 @@
                         <td>${r.cantidad_requerida}</td>
                         <td><span class="badge bg-secondary">${r.unidad_medida}</span></td>
                         <td class="text-center">
-                            <button class="btn btn-sm btn-danger" onclick="eliminarInsumoDeReceta(${r.id_escandallo})">🗑️ Quitar</button>
+                            ${!esStock ? `<button class="btn btn-sm btn-danger" onclick="eliminarInsumoDeReceta(${r.id_escandallo})">🗑️ Quitar</button>` : '<span class="text-muted small">Solo lectura</span>'}
                         </td>
                     </tr>
                 `).join('');

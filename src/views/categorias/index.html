@@ -244,12 +244,13 @@
             const tbody = document.getElementById('tablaCategorias');
             if (!tbody) return;
 
-            // 🌟 Verificamos si el usuario actual es de marketing o stock para restringir botones
+            // 🌟 Identificamos el rol del usuario actual
             const usuarioActual = JSON.parse(localStorage.getItem('usuarioLogueado')) || {};
-            const rolUser = (usuarioActual.nombre_rol || '').toLowerCase();
+            const rolUser = (usuarioActual.nombre_rol || '').toLowerCase().trim();
             const esMarketing = rolUser === 'marketing';
+            const esStock = rolUser === 'control de stock';
 
-            // Ocultar botón de nueva categoría si es marketing
+            // Ocultar botón de nueva categoría solo si es marketing (Stock SÍ puede crear)
             const btnNuevaCat = document.querySelector('button[onclick="abrirModalCategoria()"]');
             if (btnNuevaCat) {
                 btnNuevaCat.style.display = esMarketing ? 'none' : 'block';
@@ -275,7 +276,7 @@
                         <button class="btn btn-sm btn-info text-white me-1" title="Ver Productos" onclick="verDetalleCategoria(${c.id_categoria}, '${c.nombre_categoria}')">👁️</button>
                         ${!esMarketing ? `
                             <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarCategoria(${c.id_categoria}, '${c.nombre_categoria}')">✏️</button>
-                            <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarCategoria(${c.id_categoria})">🗑️</button>
+                            ${!esStock ? `<button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarCategoria(${c.id_categoria})">🗑️</button>` : ''}
                         ` : '<span class="text-muted small">Solo lectura</span>'}
                     </td>
                 </tr>
