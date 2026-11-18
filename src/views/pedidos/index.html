@@ -93,7 +93,7 @@
         function cerrarSesionAdmin() {
             localStorage.removeItem('usuarioLogueado');
             localStorage.removeItem('token');
-            window.location.href = '../login.html'; // O '/login.html' según la profundidad de la carpeta
+            window.location.href = '../login.html'; 
         }
 
         // Carga automática del Header común y aplicación inmediata de roles
@@ -150,6 +150,11 @@
             const fin = inicio + porPagina;
             const pedidosPagina = pedidos.slice(inicio, fin);
 
+            // 🌟 Verificamos si el usuario actual es de Producción para restringir la eliminación
+            const usuarioActual = JSON.parse(localStorage.getItem('usuarioLogueado')) || {};
+            const rolUser = (usuarioActual.nombre_rol || '').toLowerCase().trim();
+            const esProduccion = rolUser === 'produccion';
+
             if (pedidosPagina.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-muted">No se encontraron pedidos.</td></tr>`;
                 renderizarPaginacion(0);
@@ -179,9 +184,11 @@
                         <button class="btn btn-info btn-sm text-white me-1" onclick="verDetallePedido(${p.id_pedido})" title="Ver Detalle">
                             <i class="fas fa-eye"></i>
                         </button>
-                        <button class="btn btn-danger btn-sm" onclick="eliminarPedido(${p.id_pedido})" title="Eliminar Pedido">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                        ${!esProduccion ? `
+                            <button class="btn btn-danger btn-sm" onclick="eliminarPedido(${p.id_pedido})" title="Eliminar Pedido">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        ` : ''}
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -261,20 +268,6 @@
             renderizarTabla(filtrados);
         });
 
-        async function cargarHeader() {
-            try {
-                const response = await fetch('/partials/header.html'); 
-                if (response.ok) {
-                    const html = await response.text();
-                    document.getElementById('header-container').innerHTML = html;
-                } else {
-                    console.error("No se pudo cargar el header.");
-                }
-            } catch (error) {
-                console.error("Error de red al cargar el header:", error);
-            }
-        }
-
         async function verDetallePedido(idPedido) {
             try {
                 const res = await fetch(`${API}/admin/${idPedido}/detalle`);
@@ -308,7 +301,7 @@
                     `;
                 });
 
-                // 💳 Información de Pago y Previsualización Directa de la Imagen
+                // Información de Pago y Previsualización Directa de la Imagen
                 const metodoPago = pedido.metodo_pago || 'Efectivo al Retirar';
                 let comprobanteHtml = '<span class="text-muted">Sin comprobante adjunto (Pago en efectivo)</span>';
 
@@ -367,7 +360,7 @@
                         <h5>Total Final: <span class="text-success">$${Number(pedido.monto_final).toFixed(2)}</span></h5>
                     </div>
 
-                    <!-- 💳 APARTADO DE PAGO Y VERIFICACIÓN -->
+                    <!-- APARTADO DE PAGO Y VERIFICACIÓN -->
                     <hr>
                     <h5 class="fw-bold mb-3"><i class="fas fa-credit-card me-2"></i> Verificación de Pago</h5>
                     <div class="bg-light p-3 rounded mb-3 small">
@@ -428,7 +421,6 @@
 
         // Ejecutar al cargar la página
         document.addEventListener('DOMContentLoaded', () => {
-            cargarHeader();
             cargarPedidos();
         });
     </script>

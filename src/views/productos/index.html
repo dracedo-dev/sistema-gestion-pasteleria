@@ -262,11 +262,12 @@
             const rolUser = (usuarioActual.nombre_rol || '').toLowerCase().trim();
             const esMarketing = rolUser === 'marketing';
             const esStock = rolUser === 'control de stock';
+            const esProduccion = rolUser === 'produccion';
 
-            // Ocultar botón de "+ Nuevo Producto" solo si es Marketing (Stock SÍ puede crear)
+            // Ocultar botón de "+ Nuevo Producto" si es Marketing o Producción (Stock SÍ puede crear)
             const contenedorBtnNuevo = document.getElementById('contenedorBtnNuevo');
             if (contenedorBtnNuevo) {
-                contenedorBtnNuevo.style.display = esMarketing ? 'none' : 'block';
+                contenedorBtnNuevo.style.display = (esMarketing || esProduccion) ? 'none' : 'block';
             }
 
             if (datosPagina.length === 0) {
@@ -285,7 +286,7 @@
                     <td>${p.descripcion || '-'}</td>
                     <td class="text-center">
                         <button class="btn btn-sm btn-info text-white me-1" title="Ver Historial" onclick="verDetalleProducto(${p.id_producto}, '${p.nombre_producto}')">👁️</button>
-                        ${!esMarketing ? `
+                        ${(!esMarketing && !esProduccion) ? `
                             <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarProducto(${p.id_producto}, '${p.nombre_producto}', ${p.id_categoria}, ${p.precio_base}, '${p.descripcion || ''}')">✏️</button>
                             ${!esStock ? `<button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarProducto(${p.id_producto})">🗑️</button>` : ''}
                         ` : '<span class="text-muted small">Solo lectura</span>'}

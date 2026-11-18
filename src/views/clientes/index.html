@@ -28,7 +28,7 @@
                 <div class="col-md-8">
                     <input type="text" id="searchCliente" class="form-control" placeholder="Buscar por DNI, nombre, teléfono o email...">
                 </div>
-                <div class="col-md-4 text-end">
+                <div class="col-md-4 text-end" id="contenedorBtnNuevoCliente">
                     <button class="btn btn-success w-100" onclick="abrirModalCliente()">+ Nuevo Cliente</button>
                 </div>
             </div>
@@ -125,11 +125,11 @@
             };
         }
 
-                // Función global de cierre de sesión para el panel admin
+        // Función global de cierre de sesión para el panel admin
         function cerrarSesionAdmin() {
             localStorage.removeItem('usuarioLogueado');
             localStorage.removeItem('token');
-            window.location.href = '../login.html'; // O '/login.html' según la profundidad de la carpeta
+            window.location.href = '../login.html'; 
         }
 
         // Carga automática del Header común y aplicación inmediata de roles
@@ -163,7 +163,7 @@
                             }
                         }
                     } catch (e) {
-                        console.error('Error al filtrar roles en el header:', e);
+                        console.error('Error al filtrar el menú por roles:', e);
                     }
                 }
             });
@@ -236,6 +236,17 @@
             const tbody = document.getElementById('tablaClientes');
             if (!tbody) return;
 
+            // 🌟 Verificamos si el usuario actual es de Producción
+            const usuarioActual = JSON.parse(localStorage.getItem('usuarioLogueado')) || {};
+            const rolUser = (usuarioActual.nombre_rol || '').toLowerCase().trim();
+            const esProduccion = rolUser === 'produccion';
+
+            // Ocultar el botón de "+ Nuevo Cliente" si es Producción
+            const contenedorBtnNuevo = document.getElementById('contenedorBtnNuevoCliente');
+            if (contenedorBtnNuevo) {
+                contenedorBtnNuevo.style.display = esProduccion ? 'none' : 'block';
+            }
+
             if (datosPagina.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No se encontraron clientes.</td></tr>`;
                 const pagUl = document.getElementById('paginationClientes');
@@ -245,7 +256,6 @@
 
             tbody.innerHTML = datosPagina.map(c => {
                 const pedidosCompletados = c.pedidos_completados || 0;
-                // Condición: Si tiene 3, 7, 11... pedidos completados, el próximo (4to, 8vo...) tiene 15% off
                 const tieneDescuentoPendiente = (pedidosCompletados > 0 && pedidosCompletados % 4 === 3);
 
                 return `
@@ -261,8 +271,10 @@
                         </td>
                         <td class="text-center">
                             <button class="btn btn-sm btn-info text-white me-1" title="Ver Historial y Pedidos" onclick="verHistorialCliente(${c.id_cliente}, '${c.nombre_completo}')">📜</button>
-                            <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarCliente(${c.id_cliente}, '${c.dni || ''}', '${c.nombre_completo}', '${c.telefono || ''}', '${c.email || ''}')">✏️</button>
-                            <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarCliente(${c.id_cliente})">🗑️</button>
+                            ${!esProduccion ? `
+                                <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarCliente(${c.id_cliente}, '${c.dni || ''}', '${c.nombre_completo}', '${c.telefono || ''}', '${c.email || ''}')">✏️</button>
+                                <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarCliente(${c.id_cliente})">🗑️</button>
+                            ` : '<span class="text-muted small">Solo lectura</span>'}
                         </td>
                     </tr>
                 `;
@@ -348,7 +360,6 @@
                     return;
                 }
 
-                // Separar en pedidos en curso y finalizados
                 const enCurso = pedidos.filter(p => p.estado_pedido.toLowerCase() !== 'entregado' && p.estado_pedido.toLowerCase() !== 'cancelado');
                 const historial = pedidos.filter(p => p.estado_pedido.toLowerCase() === 'entregado' || p.estado_pedido.toLowerCase() === 'cancelado');
 
