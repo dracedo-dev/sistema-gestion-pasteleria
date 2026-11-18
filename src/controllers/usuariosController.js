@@ -18,12 +18,16 @@ const loginUsuario = async (req, res) => {
         }
 
         const usuario = rows[0];
-        const esAdmin = usuario.nombre_rol && usuario.nombre_rol.toLowerCase() === 'administrador';
+        const nombreRol = usuario.nombre_rol ? usuario.nombre_rol.toLowerCase() : '';
+        
+        // 🌟 Definimos qué roles pertenecen al panel administrativo
+        const rolesAdmin = ['administrador', 'marketing', 'control de stock', 'produccion'];
+        const esPersonalAdmin = rolesAdmin.includes(nombreRol);
 
-        // Si es Administrador (u otro rol interno), exigimos y validamos contraseña
-        if (esAdmin) {
+        // Si es un rol del panel admin, exigimos y validamos contraseña
+        if (esPersonalAdmin) {
             if (!password) {
-                return res.status(400).json({ error: 'Se requiere contraseña para cuentas administrativas' });
+                return res.status(400).json({ error: 'Se requiere contraseña para cuentas del personal' });
             }
             const passwordValid = (password === usuario.password_hash); 
 
@@ -46,7 +50,7 @@ const loginUsuario = async (req, res) => {
         res.json({
             message: 'Login exitoso',
             usuario,
-            redireccion: esAdmin ? '/dashboardAdmin/index.html' : '/dashboardCliente/index.html'
+            redireccion: esPersonalAdmin ? '/dashboardAdmin/index.html' : '/dashboardCliente/index.html'
         });
     } catch (err) {
         console.error("Error en login:", err);

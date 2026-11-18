@@ -7,15 +7,10 @@
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script>
-        // 1. Verificamos inmediatamente al cargar el HTML
         const usuarioGuardado = JSON.parse(localStorage.getItem('usuarioLogueado'));
-        
-        // 2. Si no hay sesión o es un cliente, destruimos el documento y redirigimos al instante
+        // Permitimos el ingreso a cualquier rol que no sea cliente
         if (!usuarioGuardado || !usuarioGuardado.nombre_rol || usuarioGuardado.nombre_rol.toLowerCase() === 'cliente') {
-            // Limpiamos cualquier rastro por seguridad
-            localStorage.clear();
-            // Reemplazamos el historial para que el botón "Atrás" no funcione
-            window.location.replace('/login.html');
+            window.location.href = '../login.html'; 
         }
     </script>
 </head>
@@ -135,12 +130,40 @@
             window.location.href = '../login.html'; // O '/login.html' según la profundidad de la carpeta
         }
 
-        // Carga automática del Header común
+        // Carga automática del Header común y aplicación inmediata de roles
         fetch('../partials/header.html')
             .then(res => res.text())
             .then(data => {
                 const headerContainer = document.getElementById('header-container');
-                if (headerContainer) headerContainer.innerHTML = data;
+                if (headerContainer) {
+                    headerContainer.innerHTML = data;
+
+                    // 🌟 FILTRAR EL MENÚ SEGÚN EL ROL DEL USUARIO
+                    try {
+                        const usuarioStr = localStorage.getItem('usuarioLogueado');
+                        if (usuarioStr) {
+                            const usuario = JSON.parse(usuarioStr);
+                            if (usuario && usuario.nombre_rol) {
+                                const rolActual = usuario.nombre_rol.toLowerCase().trim();
+                                const itemsMenu = headerContainer.querySelectorAll('.navbar-nav .nav-item');
+
+                                itemsMenu.forEach(item => {
+                                    const rolesPermitidos = item.getAttribute('data-roles');
+                                    if (rolesPermitidos) {
+                                        const listaRoles = rolesPermitidos.split(',').map(r => r.trim());
+                                        if (!listaRoles.includes(rolActual)) {
+                                            item.style.setProperty('display', 'none', 'important');
+                                        } else {
+                                            item.style.setProperty('display', 'block', 'important');
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Error al filtrar roles en el header:', e);
+                    }
+                }
             });
 
         function abrirModal(modalId) {
@@ -221,6 +244,17 @@
             const tbody = document.getElementById('tablaCategorias');
             if (!tbody) return;
 
+            // 🌟 Verificamos si el usuario actual es de marketing o stock para restringir botones
+            const usuarioActual = JSON.parse(localStorage.getItem('usuarioLogueado')) || {};
+            const rolUser = (usuarioActual.nombre_rol || '').toLowerCase();
+            const esMarketing = rolUser === 'marketing';
+
+            // Ocultar botón de nueva categoría si es marketing
+            const btnNuevaCat = document.querySelector('button[onclick="abrirModalCategoria()"]');
+            if (btnNuevaCat) {
+                btnNuevaCat.style.display = esMarketing ? 'none' : 'block';
+            }
+
             if (datosPagina.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">No se encontraron categorías.</td></tr>`;
                 const pagUl = document.getElementById('paginationCategorias');
@@ -233,14 +267,16 @@
                     <td>${c.id_categoria}</td>
                     <td class="fw-bold">${c.nombre_categoria}</td>
                     <td>
-                        <button class="btn btn-sm ${c.activo !== false ? 'btn-success' : 'btn-secondary'}" onclick="toggleEstadoCategoria(${c.id_categoria}, ${c.activo !== false})">
+                        <button class="btn btn-sm ${c.activo !== false ? 'btn-success' : 'btn-secondary'}" ${esMarketing ? 'disabled' : ''} onclick="toggleEstadoCategoria(${c.id_categoria}, ${c.activo !== false})">
                             ${c.activo !== false ? 'Activo' : 'Inactivo'}
                         </button>
                     </td>
                     <td class="text-center">
                         <button class="btn btn-sm btn-info text-white me-1" title="Ver Productos" onclick="verDetalleCategoria(${c.id_categoria}, '${c.nombre_categoria}')">👁️</button>
-                        <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarCategoria(${c.id_categoria}, '${c.nombre_categoria}')">✏️</button>
-                        <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarCategoria(${c.id_categoria})">🗑️</button>
+                        ${!esMarketing ? `
+                            <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarCategoria(${c.id_categoria}, '${c.nombre_categoria}')">✏️</button>
+                            <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarCategoria(${c.id_categoria})">🗑️</button>
+                        ` : '<span class="text-muted small">Solo lectura</span>'}
                     </td>
                 </tr>
             `).join('');

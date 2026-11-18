@@ -7,14 +7,9 @@
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script>
-        // 1. Obtener la sesión guardada
         const usuarioGuardado = JSON.parse(localStorage.getItem('usuarioLogueado'));
-
-        // 2. Verificar si no existe usuario O si el usuario NO es Administrador
-        if (!usuarioGuardado || !usuarioGuardado.nombre_rol || usuarioGuardado.nombre_rol.toLowerCase() !== 'administrador') {
-            // Redirigir al login
-            // Si tu servidor Express sirve la carpeta 'views' como estática, usa '/login.html'
-            // Si accedes directamente por archivo/ruta relativa, usa '../login.html'
+        // Permitimos el ingreso a cualquier rol que no sea cliente
+        if (!usuarioGuardado || !usuarioGuardado.nombre_rol || usuarioGuardado.nombre_rol.toLowerCase() === 'cliente') {
             window.location.href = '../login.html'; 
         }
     </script>
@@ -33,7 +28,7 @@
                 <div class="col-md-8">
                     <input type="text" id="searchProductoAdmin" class="form-control" placeholder="Buscar por nombre o descripción...">
                 </div>
-                <div class="col-md-4 text-end">
+                <div class="col-md-4 text-end" id="contenedorBtnNuevo">
                     <button class="btn btn-success w-100" onclick="abrirModalProducto()">+ Nuevo Producto</button>
                 </div>
             </div>
@@ -140,15 +135,43 @@
         function cerrarSesionAdmin() {
             localStorage.removeItem('usuarioLogueado');
             localStorage.removeItem('token');
-            window.location.href = '../login.html'; // O '/login.html' según la profundidad de la carpeta
+            window.location.href = '../login.html'; 
         }
 
-        // Carga automática del Header común
+        // Carga automática del Header común y aplicación inmediata de roles
         fetch('../partials/header.html')
             .then(res => res.text())
             .then(data => {
                 const headerContainer = document.getElementById('header-container');
-                if (headerContainer) headerContainer.innerHTML = data;
+                if (headerContainer) {
+                    headerContainer.innerHTML = data;
+
+                    // 🌟 FILTRAR EL MENÚ SEGÚN EL ROL DEL USUARIO
+                    try {
+                        const usuarioStr = localStorage.getItem('usuarioLogueado');
+                        if (usuarioStr) {
+                            const usuario = JSON.parse(usuarioStr);
+                            if (usuario && usuario.nombre_rol) {
+                                const rolActual = usuario.nombre_rol.toLowerCase().trim();
+                                const itemsMenu = headerContainer.querySelectorAll('.navbar-nav .nav-item');
+
+                                itemsMenu.forEach(item => {
+                                    const rolesPermitidos = item.getAttribute('data-roles');
+                                    if (rolesPermitidos) {
+                                        const listaRoles = rolesPermitidos.split(',').map(r => r.trim());
+                                        if (!listaRoles.includes(rolActual)) {
+                                            item.style.setProperty('display', 'none', 'important');
+                                        } else {
+                                            item.style.setProperty('display', 'block', 'important');
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Error al filtrar roles en el header:', e);
+                    }
+                }
             });
 
         function abrirModal(modalId) {
@@ -234,6 +257,17 @@
             const tbody = document.getElementById('tablaProductosAdmin');
             if (!tbody) return;
 
+            // 🌟 Verificamos si el usuario actual es de Marketing para restringir acciones
+            const usuarioActual = JSON.parse(localStorage.getItem('usuarioLogueado')) || {};
+            const rolUser = (usuarioActual.nombre_rol || '').toLowerCase();
+            const esMarketing = rolUser === 'marketing';
+
+            // Ocultar botón de "+ Nuevo Producto" si es marketing
+            const contenedorBtnNuevo = document.getElementById('contenedorBtnNuevo');
+            if (contenedorBtnNuevo) {
+                contenedorBtnNuevo.style.display = esMarketing ? 'none' : 'block';
+            }
+
             if (datosPagina.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No se encontraron productos.</td></tr>`;
                 const pagUl = document.getElementById('paginationProductos');
@@ -250,8 +284,10 @@
                     <td>${p.descripcion || '-'}</td>
                     <td class="text-center">
                         <button class="btn btn-sm btn-info text-white me-1" title="Ver Historial" onclick="verDetalleProducto(${p.id_producto}, '${p.nombre_producto}')">👁️</button>
-                        <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarProducto(${p.id_producto}, '${p.nombre_producto}', ${p.id_categoria}, ${p.precio_base}, '${p.descripcion || ''}')">✏️</button>
-                        <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarProducto(${p.id_producto})">🗑️</button>
+                        ${!esMarketing ? `
+                            <button class="btn btn-sm btn-primary me-1" title="Editar" onclick="prepararEditarProducto(${p.id_producto}, '${p.nombre_producto}', ${p.id_categoria}, ${p.precio_base}, '${p.descripcion || ''}')">✏️</button>
+                            <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarProducto(${p.id_producto})">🗑️</button>
+                        ` : '<span class="text-muted small">Solo lectura</span>'}
                     </td>
                 </tr>
             `).join('');

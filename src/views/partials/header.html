@@ -6,19 +6,18 @@
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                <li class="nav-item"><a class="nav-link" href="/dashboardAdmin/index.html">Inicio</a></li>
-                <li class="nav-item"><a class="nav-link" href="/roles/index.html">Roles</a></li>
-                <li class="nav-item"><a class="nav-link" href="/usuarios/index.html">Usuarios</a></li>
-                <li class="nav-item"><a class="nav-link" href="/categorias/index.html">Categorías</a></li>
-                <li class="nav-item"><a class="nav-link" href="/insumos/index.html">Insumos</a></li>
-                <li class="nav-item"><a class="nav-link" href="/clientes/index.html">Clientes</a></li>
-                <li class="nav-item"><a class="nav-link" href="/productos/index.html">Productos</a></li>
-                <li class="nav-item"><a class="nav-link" href="/recetas/index.html">Recetas</a></li>
-                <li class="nav-item"><a class="nav-link" href="/pedidos/index.html">Pedidos</a></li>
+                <li class="nav-item" data-roles="administrador,marketing,control de stock,produccion"><a class="nav-link" href="/dashboardAdmin/index.html">Inicio</a></li>
+                <li class="nav-item" data-roles="administrador"><a class="nav-link" href="/roles/index.html">Roles</a></li>
+                <li class="nav-item" data-roles="administrador"><a class="nav-link" href="/usuarios/index.html">Usuarios</a></li>
+                <li class="nav-item" data-roles="administrador,marketing,control de stock"><a class="nav-link" href="/categorias/index.html">Categorías</a></li>
+                <li class="nav-item" data-roles="administrador,control de stock"><a class="nav-link" href="/insumos/index.html">Insumos</a></li>
+                <li class="nav-item" data-roles="administrador,produccion"><a class="nav-link" href="/clientes/index.html">Clientes</a></li>
+                <li class="nav-item" data-roles="administrador,marketing,control de stock,produccion"><a class="nav-link" href="/productos/index.html">Productos</a></li>
+                <li class="nav-item" data-roles="administrador,control de stock,produccion"><a class="nav-link" href="/recetas/index.html">Recetas</a></li>
+                <li class="nav-item" data-roles="administrador,produccion"><a class="nav-link" href="/pedidos/index.html">Pedidos</a></li>
             </ul>
             <div class="d-flex align-items-center gap-2">
                 <a href="/dashboardCliente/index.html" class="btn btn-outline-light btn-sm" target="_blank">🌐 Ver Menú Cliente</a>
-                <!-- Llamamos a la función global directamente -->
                 <button onclick="cerrarSesionAdmin()" class="btn btn-danger btn-sm">Cerrar Sesión</button>
             </div>
         </div>
