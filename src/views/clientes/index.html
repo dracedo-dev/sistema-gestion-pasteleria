@@ -130,6 +130,13 @@
             };
         }
 
+                // Función global de cierre de sesión para el panel admin
+        function cerrarSesionAdmin() {
+            localStorage.removeItem('usuarioLogueado');
+            localStorage.removeItem('token');
+            window.location.href = '../login.html'; // O '/login.html' según la profundidad de la carpeta
+        }
+
         // Carga automática del Header común
         fetch('../partials/header.html')
             .then(res => res.text())
